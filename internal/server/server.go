@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -490,6 +491,35 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 		return c.JSON(http.StatusOK, map[string]any{
 			"ok":      true,
 			"service": "mw-echo",
+		})
+	})
+
+	// Pocket pairing config for mw-pocket mobile companion
+	app.GET("/api/pocket/pair-config", func(c echo.Context) error {
+		// Build pair config using configured URLs and env vars
+		pairUri := os.Getenv("MW_POCKET_PAIR_URI")
+		echoUrl := os.Getenv("MW_ECHO_URL")
+		ridUrl := os.Getenv("MW_RID_URL")
+		myloveUrl := os.Getenv("MW_MYLOVE_URL")
+		capabilities := []string{"tasks", "fleet", "storage", "comms", "worldradar"}
+		version := "1.0.0"
+
+		// If static auth is enabled (AuthToken set), require authentication for pair-config
+		if strings.TrimSpace(cfg.AuthToken) != "" {
+			header := strings.TrimSpace(c.Request().Header.Get("Authorization"))
+			provided := strings.TrimPrefix(header, "Bearer ")
+			if header == provided || subtle.ConstantTimeCompare([]byte(provided), []byte(cfg.AuthToken)) != 1 {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			}
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"pairUri":      pairUri,
+			"echoUrl":      echoUrl,
+			"ridUrl":       ridUrl,
+			"myloveUrl":    myloveUrl,
+			"capabilities": capabilities,
+			"version":      version,
 		})
 	})
 
