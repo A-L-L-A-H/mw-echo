@@ -11,7 +11,13 @@ import (
 // Observatory provides OTLP trace/metric/log ingest, localhost protocol auto-discovery,
 // and local Git repository radar inside mw-echo.
 type Observatory struct {
-	hub *store.HubStore
+	hub    *store.HubStore
+	triage *ErrorTriageMonitor
+}
+
+// SetErrorTriageMonitor attaches an ErrorTriageMonitor to observe incoming OTLP error spans.
+func (o *Observatory) SetErrorTriageMonitor(monitor *ErrorTriageMonitor) {
+	o.triage = monitor
 }
 
 // New initializes the Observatory module and ensures its SQLite table exists.

@@ -15,6 +15,7 @@ import {
   Laptop,
   LayoutDashboard,
   MessageSquare,
+  Network,
   Package,
   Radar,
   Radio,
@@ -53,6 +54,7 @@ import { CoderTab } from './components/CoderTab';
 import { DesktopHostTab } from './components/DesktopHostTab';
 import { DiskDoctorTab } from './components/DiskDoctorTab';
 import { DocsTab } from './components/DocsTab';
+import { FleetCockpitTab } from './components/FleetCockpitTab';
 import { FlowsTab } from './components/FlowsTab';
 import { FreeModelsTab } from './components/FreeModelsTab';
 import { MemVaultTab } from './components/MemVaultTab';
@@ -85,7 +87,8 @@ type NavTabId =
   | 'vault-env'
   | 'desktop'
   | 'disk-doctor'
-  | 'memvault';
+  | 'memvault'
+  | 'fleet';
 
 interface NavTabMeta {
   id: NavTabId;
@@ -113,6 +116,7 @@ const NAV_TABS: NavTabMeta[] = [
   { id: 'desktop', sceneNum: '16', stageName: 'DESKTOP', icon: Laptop },
   { id: 'disk-doctor', sceneNum: '17', stageName: 'DISK', icon: HardDrive },
   { id: 'memvault', sceneNum: '18', stageName: 'MEMORY', icon: Brain },
+  { id: 'fleet', sceneNum: '19', stageName: 'FLEET', icon: Network },
 ];
 
 export function App() {
@@ -685,6 +689,10 @@ export function App() {
 
         {activeTab === 'memvault' ? (
           <MemVaultTab onNotify={pushNotice} />
+        ) : null}
+
+        {activeTab === 'fleet' ? (
+          <FleetCockpitTab />
         ) : null}
       </main>
 

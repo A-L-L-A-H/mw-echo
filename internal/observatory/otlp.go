@@ -253,6 +253,13 @@ func (o *Observatory) handleOTLPTraces(c echo.Context) error {
 	if err := o.insertEvents(c.Request().Context(), events); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
+	if o.triage != nil {
+		for _, ev := range events {
+			if ev.Status == "error" {
+				_, _ = o.triage.RecordErrorSpan(c.Request().Context(), ev.Service, ev.Name)
+			}
+		}
+	}
 	return c.JSON(http.StatusOK, map[string]any{"partialSuccess": map[string]any{}, "accepted": len(events)})
 }
 
@@ -304,6 +311,13 @@ func (o *Observatory) handleOTLPMetrics(c echo.Context) error {
 	}
 	if err := o.insertEvents(c.Request().Context(), events); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if o.triage != nil {
+		for _, ev := range events {
+			if ev.Status == "error" {
+				_, _ = o.triage.RecordErrorSpan(c.Request().Context(), ev.Service, ev.Name)
+			}
+		}
 	}
 	return c.JSON(http.StatusOK, map[string]any{"partialSuccess": map[string]any{}, "accepted": len(events)})
 }
@@ -369,6 +383,13 @@ func (o *Observatory) handleOTLPLogs(c echo.Context) error {
 	}
 	if err := o.insertEvents(c.Request().Context(), events); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if o.triage != nil {
+		for _, ev := range events {
+			if ev.Status == "error" {
+				_, _ = o.triage.RecordErrorSpan(c.Request().Context(), ev.Service, ev.Name)
+			}
+		}
 	}
 	return c.JSON(http.StatusOK, map[string]any{"partialSuccess": map[string]any{}, "accepted": len(events)})
 }

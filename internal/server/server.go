@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -24,6 +25,7 @@ import (
 	"github.com/A-L-L-A-H/mw-echo/internal/comms"
 	"github.com/A-L-L-A-H/mw-echo/internal/desktop"
 	"github.com/A-L-L-A-H/mw-echo/internal/diskdoctor"
+	"github.com/A-L-L-A-H/mw-echo/internal/fleet"
 	"github.com/A-L-L-A-H/mw-echo/internal/flows"
 	"github.com/A-L-L-A-H/mw-echo/internal/gamification"
 	"github.com/A-L-L-A-H/mw-echo/internal/importer"
@@ -154,6 +156,25 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	if err != nil {
 		panic("init observatory: " + err.Error())
 	}
+	obs.SetErrorTriageMonitor(observatory.NewErrorTriageMonitor(observatory.ErrorTriageOptions{
+		OnSpike: func(ctx context.Context, serviceName, sampleError string, count int) error {
+			code := fmt.Sprintf("TRIAGE-%s-%d", strings.ToUpper(strings.ReplaceAll(serviceName, " ", "-")), time.Now().UTC().Unix())
+			title := fmt.Sprintf("[AUTO-TRIAGE] %s error spike (%d errors): %s", serviceName, count, sampleError)
+			savedTask, taskErr := hub.UpsertTask(ctx, store.TaskRecord{
+				Project:  "mw-echo",
+				Code:     code,
+				Title:    title,
+				Priority: "P1",
+				Status:   "todo",
+			})
+			if taskErr != nil {
+				log.Printf("[observatory/triage] failed to create P1 bounty task for %s: %v", serviceName, taskErr)
+				return taskErr
+			}
+			log.Printf("[observatory/triage] created P1 bounty task %s for %s (%d error spans): %s", savedTask.Code, serviceName, count, sampleError)
+			return nil
+		},
+	}))
 
 	coderEngine, err := codingagent.NewEngine(hub, codingagent.Options{
 		DefaultGatewayURL:   internalGatewayURL,
@@ -407,6 +428,11 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	memMgr, err := memvault.NewManager(hub)
 	if err != nil {
 		panic("init memvault manager: " + err.Error())
+	}
+
+	fleetMgr, err := fleet.NewManager(hub, fleet.Options{})
+	if err != nil {
+		panic("init fleet manager: " + err.Error())
 	}
 
 	authGuard := func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -850,7 +876,7 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 
 	// Unified MCP JSON-RPC 2.0 endpoint
 	api.POST("/mcp", func(c echo.Context) error {
-		return handleMCP(c, hub, waMgr, worldRadar, blueprintCat, flowEngine, commsMgr, vaultEnv, desktopMgr, memMgr)
+		return handleMCP(c, hub, waMgr, worldRadar, blueprintCat, flowEngine, commsMgr, vaultEnv, desktopMgr, memMgr, fleetMgr)
 	})
 
 	// Trigger matching radar_event flows whenever a World Radar instance run completes via HTTP.
@@ -912,6 +938,9 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 
 	// Local-first Memory Vault & Hard Privacy Firewall
 	memMgr.RegisterRoutes(api)
+
+	// Sovereign Fleet & ARSY Constitutional Governor (19 FLEET)
+	fleetMgr.RegisterRoutes(api)
 
 	return app
 }
@@ -975,6 +1004,7 @@ func handleMCP(
 	vaultEnv *vaultenv.Vault,
 	desktopMgr *desktop.Manager,
 	memMgr *memvault.Manager,
+	fleetMgr *fleet.Manager,
 ) error {
 	var rpc mcpRequest
 	if err := c.Bind(&rpc); err != nil {
@@ -1018,6 +1048,8 @@ func handleMCP(
 				{"name": "echo_local_ai_discover", "description": "Discover local loopback AI runtimes (Ollama, LM Studio, vLLM) and available models.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 				{"name": "echo_disk_audit", "description": "Read-only disk telemetry and hotspot quick audit across local volumes (never deletes files).", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 				{"name": "echo_memvault_search", "description": "Full-text search cloud-safe public conversations in local MemVault (strictly enforces cloudSafeOnly=true privacy firewall).", "inputSchema": map[string]any{"type": "object", "required": []string{"query"}, "properties": map[string]any{"query": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
+				{"name": "echo_fleet_probe", "description": "Concurrently probe /health across all registered Sovereign Fleet services.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+				{"name": "echo_arsy_audit_verify", "description": "Verify the SHA-256 Merkle hash chain integrity of the ARSY constitutional audit log.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 			},
 		})
 	case "tools/call":
@@ -1135,6 +1167,10 @@ func handleMCP(
 			}
 		case "echo_memvault_search":
 			out, err = memMgr.Search(ctx, strArg("query"), true, intArg("limit", 25))
+		case "echo_fleet_probe":
+			out, err = fleetMgr.ProbeFleet(ctx)
+		case "echo_arsy_audit_verify":
+			out, err = fleetMgr.VerifyAuditChain(ctx)
 		default:
 			return fail(-32601, "unknown tool: "+call.Name)
 		}

@@ -69,6 +69,7 @@ import {
   StatTile,
   type BadgeTone,
 } from './UiPrimitives';
+import { WorldGeoMap } from './WorldGeoMap';
 
 interface WorldRadarTabProps {
   onNotify: (tone: 'ok' | 'err' | 'info', message: string) => void;
@@ -730,6 +731,18 @@ export function WorldRadarTab({ onNotify }: WorldRadarTabProps) {
             ))}
           </div>
         ) : null}
+      </SectionCard>
+
+      {/* 1.5. Equirectangular World Geo Radar Map */}
+      <SectionCard
+        title="WORLD GEO RADAR MAP"
+        subtitle="Live equirectangular projection of geo-tagged radar events across all active domains."
+        icon={<Globe2 className="h-4 w-4" />}
+        sticker="GEO RADAR"
+        stickerTone="cyan"
+        accent="cyan"
+      >
+        <WorldGeoMap events={events} />
       </SectionCard>
 
       {/* 2. Radar Packs, Active Instances & Connector Health */}
