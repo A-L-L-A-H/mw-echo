@@ -157,6 +157,18 @@ CREATE TABLE IF NOT EXISTS storage_objects (
   UNIQUE(project, logical_path)
 );
 CREATE INDEX IF NOT EXISTS idx_storage_sha ON storage_objects(sha256);
+
+CREATE TABLE IF NOT EXISTS projects (
+  slug TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  repo_path TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'active',
+  color TEXT NOT NULL DEFAULT '#6366f1',
+  default_agent TEXT NOT NULL DEFAULT 'default',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `
 	_, err := s.db.Exec(schema)
 	if err != nil {

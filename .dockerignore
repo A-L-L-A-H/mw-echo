@@ -1,0 +1,12 @@
+mw-echo.exe
+mw-echo
+*.db
+*.db-wal
+*.db-shm
+.git
+.master.key
+blobs/
+data/
+web/node_modules/
+web/dist/
+.env

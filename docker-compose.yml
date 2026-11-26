@@ -1,0 +1,26 @@
+services:
+  mw-echo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/a-l-l-a-h/mw-echo:latest
+    container_name: mw-echo
+    restart: unless-stopped
+    ports:
+      - "4310:4310"
+    environment:
+      MW_ECHO_ADDR: "0.0.0.0:4310"
+      MW_ECHO_DATA_DIR: "/data"
+      MW_ECHO_TOKEN: "${MW_ECHO_TOKEN:-}"
+      MW_ECHO_MASTER_KEY: "${MW_ECHO_MASTER_KEY:-}"
+    volumes:
+      - mw_echo_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4310/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  mw_echo_data:

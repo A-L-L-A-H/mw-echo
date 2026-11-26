@@ -1,8 +1,10 @@
-mw-echo.exe
-mw-echo
+/mw-echo.exe
+/mw-echo.exe~
+/mw-echo
 *.db
 *.db-wal
 *.db-shm
-data/
-blobs/
+/data/
+/blobs/
 .env
+web/node_modules/

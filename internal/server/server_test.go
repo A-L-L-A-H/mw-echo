@@ -344,3 +344,66 @@ func TestNineDrivePoolGDriveS3AndRoutingPolicies(t *testing.T) {
 		t.Fatalf("gdrive delete failed: %d, remaining=%d", delGD.Code, len(driveStore))
 	}
 }
+
+func TestProjectsAIGatewayAndObservatoryRoutes(t *testing.T) {
+	_, handler := setupTestEcho(t, "")
+
+	// 1. Projects CRUD + auto progress rollup
+	projReq := httptest.NewRequest(http.MethodPost, "/api/projects", strings.NewReader(`{"slug":"echo-core","name":"Echo Core","description":"Unified Windows control hub","defaultAgent":"claude-code"}`))
+	projReq.Header.Set("Content-Type", "application/json")
+	projRec := httptest.NewRecorder()
+	handler.ServeHTTP(projRec, projReq)
+	if projRec.Code != http.StatusOK || !strings.Contains(projRec.Body.String(), `"slug":"echo-core"`) {
+		t.Fatalf("POST /api/projects failed: %d %s", projRec.Code, projRec.Body.String())
+	}
+
+	taskReq := httptest.NewRequest(http.MethodPost, "/api/tasks", strings.NewReader(`{"code":"EC-1","project":"echo-core","milestone":"M1","title":"Ship UI","priority":"p1","status":"done"}`))
+	taskReq.Header.Set("Content-Type", "application/json")
+	handler.ServeHTTP(httptest.NewRecorder(), taskReq)
+
+	getProjRec := httptest.NewRecorder()
+	handler.ServeHTTP(getProjRec, httptest.NewRequest(http.MethodGet, "/api/projects/echo-core", nil))
+	if getProjRec.Code != http.StatusOK || !strings.Contains(getProjRec.Body.String(), `"progressPct":100`) {
+		t.Fatalf("GET /api/projects/echo-core failed: %d %s", getProjRec.Code, getProjRec.Body.String())
+	}
+
+	// 2. AI Gateway routes (/v1/models & /api/ai/agents)
+	modelsRec := httptest.NewRecorder()
+	handler.ServeHTTP(modelsRec, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
+	if modelsRec.Code != http.StatusOK || !strings.Contains(modelsRec.Body.String(), `"object":"list"`) {
+		t.Fatalf("GET /v1/models failed: %d %s", modelsRec.Code, modelsRec.Body.String())
+	}
+
+	agentsRec := httptest.NewRecorder()
+	handler.ServeHTTP(agentsRec, httptest.NewRequest(http.MethodGet, "/api/ai/agents", nil))
+	if agentsRec.Code != http.StatusOK || !strings.Contains(agentsRec.Body.String(), "claude-code") {
+		t.Fatalf("GET /api/ai/agents failed: %d %s", agentsRec.Code, agentsRec.Body.String())
+	}
+
+	// 3. Observatory routes (/v1/traces, /api/observatory/stats, /api/observatory/services)
+	traceReq := httptest.NewRequest(http.MethodPost, "/v1/traces", strings.NewReader(`{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"mw-cli"}}]},"scopeSpans":[{"spans":[{"name":"run","startTimeUnixNano":"1000000000","endTimeUnixNano":"1050000000"}]}]}]}`))
+	traceReq.Header.Set("Content-Type", "application/json")
+	traceRec := httptest.NewRecorder()
+	handler.ServeHTTP(traceRec, traceReq)
+	if traceRec.Code != http.StatusOK || !strings.Contains(traceRec.Body.String(), `"accepted":1`) {
+		t.Fatalf("POST /v1/traces failed: %d %s", traceRec.Code, traceRec.Body.String())
+	}
+
+	svcRec := httptest.NewRecorder()
+	handler.ServeHTTP(svcRec, httptest.NewRequest(http.MethodGet, "/api/observatory/services", nil))
+	if svcRec.Code != http.StatusOK || !strings.Contains(svcRec.Body.String(), `"probesRun"`) {
+		t.Fatalf("GET /api/observatory/services failed: %d %s", svcRec.Code, svcRec.Body.String())
+	}
+
+	// 4. Embedded React SPA serves index.html and does not swallow unknown /api routes
+	spaRec := httptest.NewRecorder()
+	handler.ServeHTTP(spaRec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if spaRec.Code != http.StatusOK || !strings.Contains(spaRec.Body.String(), `<div id="root">`) {
+		t.Fatalf("GET / expected embedded React root, got %d %s", spaRec.Code, spaRec.Body.String())
+	}
+	missRec := httptest.NewRecorder()
+	handler.ServeHTTP(missRec, httptest.NewRequest(http.MethodGet, "/api/nonexistent-endpoint", nil))
+	if missRec.Code != http.StatusNotFound {
+		t.Fatalf("GET /api/nonexistent-endpoint expected 404, got %d", missRec.Code)
+	}
+}

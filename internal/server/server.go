@@ -3,23 +3,26 @@ package server
 import (
 	"crypto/subtle"
 	"database/sql"
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/A-L-L-A-H/mw-echo/internal/aigateway"
 	"github.com/A-L-L-A-H/mw-echo/internal/importer"
+	"github.com/A-L-L-A-H/mw-echo/internal/observatory"
 	"github.com/A-L-L-A-H/mw-echo/internal/storage"
 	"github.com/A-L-L-A-H/mw-echo/internal/store"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
 
-//go:embed ui/index.html
-var embeddedUI []byte
+//go:embed all:ui/dist
+var embeddedUIDist embed.FS
 
 type Config struct {
 	Addr      string
@@ -37,6 +40,14 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	if err != nil {
 		panic("init storage pool: " + err.Error())
 	}
+	aiGateway, err := aigateway.NewGateway(hub)
+	if err != nil {
+		panic("init ai gateway: " + err.Error())
+	}
+	obs, err := observatory.New(hub)
+	if err != nil {
+		panic("init observatory: " + err.Error())
+	}
 
 	authGuard := func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -52,8 +63,32 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 		}
 	}
 
+	distFS, err := fs.Sub(embeddedUIDist, "ui/dist")
+	if err != nil {
+		panic("init embedded ui/dist: " + err.Error())
+	}
+	indexHTML, err := fs.ReadFile(distFS, "index.html")
+	if err != nil {
+		panic("read embedded ui/dist/index.html: " + err.Error())
+	}
+	assetHandler := echo.WrapHandler(http.FileServer(http.FS(distFS)))
+
 	app.GET("/", func(c echo.Context) error {
-		return c.Blob(http.StatusOK, "text/html; charset=utf-8", embeddedUI)
+		return c.Blob(http.StatusOK, "text/html; charset=utf-8", indexHTML)
+	})
+	app.GET("/assets/*", assetHandler)
+	app.GET("/*", func(c echo.Context) error {
+		reqPath := c.Request().URL.Path
+		if strings.HasPrefix(reqPath, "/api") || strings.HasPrefix(reqPath, "/v1") || reqPath == "/health" {
+			return echo.ErrNotFound
+		}
+		trimmed := strings.TrimPrefix(reqPath, "/")
+		if trimmed != "" {
+			if info, err := fs.Stat(distFS, trimmed); err == nil && !info.IsDir() {
+				return assetHandler(c)
+			}
+		}
+		return c.Blob(http.StatusOK, "text/html; charset=utf-8", indexHTML)
 	})
 
 	app.GET("/health", func(c echo.Context) error {
@@ -187,6 +222,58 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		return c.JSON(http.StatusOK, exported)
+	})
+
+	// Project Management (auto-discovers imported projects + task/milestone progress rollups)
+	api.GET("/projects", func(c echo.Context) error {
+		projects, err := hub.ListProjects(c.Request().Context())
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+		return c.JSON(http.StatusOK, map[string]any{"projects": projects, "count": len(projects)})
+	})
+
+	api.GET("/projects/:slug", func(c echo.Context) error {
+		project, err := hub.GetProject(c.Request().Context(), c.Param("slug"))
+		if errors.Is(err, sql.ErrNoRows) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "project not found"})
+		}
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+		return c.JSON(http.StatusOK, project)
+	})
+
+	upsertProjectHandler := func(c echo.Context) error {
+		var payload store.ProjectRecord
+		if err := c.Bind(&payload); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid project JSON"})
+		}
+		if slugParam := strings.TrimSpace(c.Param("slug")); slugParam != "" {
+			payload.Slug = slugParam
+		}
+		saved, err := hub.UpsertProject(c.Request().Context(), payload)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		}
+		summary, err := hub.GetProject(c.Request().Context(), saved.Slug)
+		if err != nil {
+			return c.JSON(http.StatusOK, saved)
+		}
+		return c.JSON(http.StatusOK, summary)
+	}
+	api.POST("/projects", upsertProjectHandler)
+	api.PUT("/projects/:slug", upsertProjectHandler)
+
+	api.DELETE("/projects/:slug", func(c echo.Context) error {
+		err := hub.DeleteProject(c.Request().Context(), c.Param("slug"))
+		if errors.Is(err, sql.ErrNoRows) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "project not found"})
+		}
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		}
+		return c.JSON(http.StatusOK, map[string]bool{"deleted": true})
 	})
 
 	// 9Drive-pattern Multi-Account Storage Pool (Google Drive + S3/R2 + Local fallback)
@@ -369,6 +456,12 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 		return handleMCP(c, hub)
 	})
 
+	// Unified AI Gateway (Bifrost + 9Router RTK + Magpie + FreeLLMAPI)
+	aiGateway.RegisterRoutes(app, api)
+
+	// Observatory (OTLP ingest + Host protocol auto-discovery + Local Git Repo Radar)
+	obs.RegisterRoutes(app, api)
+
 	return app
 }
 
@@ -406,6 +499,8 @@ func handleMCP(c echo.Context, hub *store.HubStore) error {
 				{"name": "echo_list_tasks", "description": "Query canonical tasks by project, status, priority, or keyword.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]string{"type": "string"}, "status": map[string]string{"type": "string"}, "query": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
 				{"name": "echo_update_task", "description": "Update a task's status, priority, or title in mw-echo.", "inputSchema": map[string]any{"type": "object", "required": []string{"code"}, "properties": map[string]any{"code": map[string]string{"type": "string"}, "status": map[string]string{"type": "string"}, "priority": map[string]string{"type": "string"}, "title": map[string]string{"type": "string"}}}},
 				{"name": "echo_list_storage", "description": "List stored binary assets (images, PDFs, media) in mw-echo.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]string{"type": "string"}, "query": map[string]string{"type": "string"}}}},
+				{"name": "echo_list_projects", "description": "List projects with task counts, progress percentages, and milestone rollups.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+				{"name": "echo_upsert_project", "description": "Create or update a project in mw-echo.", "inputSchema": map[string]any{"type": "object", "required": []string{"slug"}, "properties": map[string]any{"slug": map[string]string{"type": "string"}, "name": map[string]string{"type": "string"}, "description": map[string]string{"type": "string"}, "status": map[string]string{"type": "string"}}}},
 			},
 		})
 	case "tools/call":
@@ -442,6 +537,15 @@ func handleMCP(c echo.Context, hub *store.HubStore) error {
 			out, err = hub.UpdateTaskStatus(ctx, strArg("code"), strArg("status"), strArg("priority"), strArg("title"))
 		case "echo_list_storage":
 			out, err = hub.ListBlobs(ctx, strArg("project"), strArg("query"), intArg("limit", 50))
+		case "echo_list_projects":
+			out, err = hub.ListProjects(ctx)
+		case "echo_upsert_project":
+			out, err = hub.UpsertProject(ctx, store.ProjectRecord{
+				Slug:        strArg("slug"),
+				Name:        strArg("name"),
+				Description: strArg("description"),
+				Status:      strArg("status"),
+			})
 		default:
 			return fail(-32601, "unknown tool: "+call.Name)
 		}
