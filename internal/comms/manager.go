@@ -25,6 +25,10 @@ const (
 	KindTelegram = "telegram"
 	// KindDiscord identifies a Discord Webhook channel.
 	KindDiscord = "discord"
+	// KindNtfy identifies an ntfy.sh HTTP push notification channel (0-account/free).
+	KindNtfy = "ntfy"
+	// KindResend identifies a Resend transactional email API channel (free 3k/mo).
+	KindResend = "resend"
 
 	// DeliveryStatusSent indicates an outbound message was accepted by the provider.
 	DeliveryStatusSent = "sent"
@@ -32,6 +36,8 @@ const (
 	DeliveryStatusFailed = "failed"
 
 	defaultTelegramAPIBase = "https://api.telegram.org"
+	defaultResendAPIBase   = "https://api.resend.com"
+	defaultResendFrom      = "MoonWitness <onboarding@resend.dev>"
 	defaultHTTPTimeout     = 15 * time.Second
 	defaultDeliveryLimit   = 50
 	maxDeliveryLimit       = 500
@@ -54,6 +60,8 @@ var (
 type Options struct {
 	HTTPClient      *http.Client
 	TelegramAPIBase string
+	ResendAPIBase   string
+	ResendFrom      string
 }
 
 // ChannelRecord represents a configured outbound communication channel with redacted secrets.
@@ -102,13 +110,15 @@ type DeliveryRecord struct {
 	CreatedAt string `json:"createdAt"`
 }
 
-// Manager manages encrypted comms channels and outbound deliveries for Telegram and Discord.
+// Manager manages encrypted comms channels and outbound deliveries for Telegram, Discord, ntfy, and Resend.
 type Manager struct {
 	hub             *store.HubStore
 	db              *sql.DB
 	secretBox       *storage.SecretBox
 	httpClient      *http.Client
 	telegramAPIBase string
+	resendAPIBase   string
+	resendFrom      string
 	alertBridge     *AlertBridge
 }
 
@@ -137,6 +147,14 @@ func NewManager(hub *store.HubStore, opts Options) (*Manager, error) {
 	if tgBase == "" {
 		tgBase = defaultTelegramAPIBase
 	}
+	resendBase := strings.TrimRight(strings.TrimSpace(opts.ResendAPIBase), "/")
+	if resendBase == "" {
+		resendBase = defaultResendAPIBase
+	}
+	resendFrom := strings.TrimSpace(opts.ResendFrom)
+	if resendFrom == "" {
+		resendFrom = defaultResendFrom
+	}
 
 	mgr := &Manager{
 		hub:             hub,
@@ -144,6 +162,8 @@ func NewManager(hub *store.HubStore, opts Options) (*Manager, error) {
 		secretBox:       secretBox,
 		httpClient:      client,
 		telegramAPIBase: tgBase,
+		resendAPIBase:   resendBase,
+		resendFrom:      resendFrom,
 	}
 	mgr.alertBridge = NewAlertBridge(mgr, defaultAlertCooldown)
 
@@ -162,7 +182,7 @@ func (m *Manager) migrate() error {
 	schema := `
 CREATE TABLE IF NOT EXISTS comms_channels (
   id TEXT PRIMARY KEY,
-  kind TEXT NOT NULL CHECK(kind IN ('telegram','discord')),
+  kind TEXT NOT NULL CHECK(kind IN ('telegram','discord','ntfy','resend')),
   name TEXT NOT NULL,
   secret_enc TEXT NOT NULL,
   secret_hint TEXT NOT NULL DEFAULT '',
@@ -186,8 +206,46 @@ CREATE TABLE IF NOT EXISTS comms_deliveries (
 );
 CREATE INDEX IF NOT EXISTS idx_comms_deliveries_created_at ON comms_deliveries(created_at DESC);
 `
-	_, err := m.db.Exec(schema)
-	return err
+	if _, err := m.db.Exec(schema); err != nil {
+		return err
+	}
+
+	var createSQL string
+	if err := m.db.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name='comms_channels'`).Scan(&createSQL); err != nil {
+		return err
+	}
+	if !strings.Contains(createSQL, "'ntfy'") || !strings.Contains(createSQL, "'resend'") {
+		tx, err := m.db.Begin()
+		if err != nil {
+			return err
+		}
+		upgradeSQL := `
+CREATE TABLE comms_channels_v2 (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK(kind IN ('telegram','discord','ntfy','resend')),
+  name TEXT NOT NULL,
+  secret_enc TEXT NOT NULL,
+  secret_hint TEXT NOT NULL DEFAULT '',
+  target_ref TEXT NOT NULL DEFAULT '',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+INSERT INTO comms_channels_v2 (id, kind, name, secret_enc, secret_hint, target_ref, enabled, created_at, updated_at)
+SELECT id, kind, name, secret_enc, secret_hint, target_ref, enabled, created_at, updated_at FROM comms_channels;
+DROP TABLE comms_channels;
+ALTER TABLE comms_channels_v2 RENAME TO comms_channels;
+CREATE INDEX IF NOT EXISTS idx_comms_channels_kind_enabled ON comms_channels(kind, enabled);
+`
+		if _, execErr := tx.Exec(upgradeSQL); execErr != nil {
+			_ = tx.Rollback()
+			return execErr
+		}
+		if commitErr := tx.Commit(); commitErr != nil {
+			return commitErr
+		}
+	}
+	return nil
 }
 
 // UpsertChannel creates or updates an encrypted communication channel.
@@ -228,6 +286,17 @@ FROM comms_channels WHERE id = ?`, channelID).Scan(
 		channelID = generateID("comms")
 	}
 
+	if kind == KindNtfy {
+		if err := validateHTTPURL(targetRef); err != nil {
+			return ChannelRecord{}, fmt.Errorf("%w: ntfy targetRef must be a valid topic URL: %v", ErrValidation, err)
+		}
+	}
+	if kind == KindResend {
+		if _, _, err := parseResendTarget(targetRef, m.resendFrom); err != nil {
+			return ChannelRecord{}, fmt.Errorf("%w: %v", ErrValidation, err)
+		}
+	}
+
 	secretEnc := existingSecretEnc
 	secretHint := existingSecretHint
 	if rawSecret != "" {
@@ -242,7 +311,7 @@ FROM comms_channels WHERE id = ?`, channelID).Scan(
 		}
 		secretEnc = encrypted
 		secretHint = maskSecretHint(rawSecret)
-	} else if !hasExisting || strings.TrimSpace(secretEnc) == "" {
+	} else if kind != KindNtfy && (!hasExisting || strings.TrimSpace(secretEnc) == "") {
 		return ChannelRecord{}, fmt.Errorf("%w: secret is required for new %s channel", ErrValidation, kind)
 	}
 
@@ -391,16 +460,19 @@ func (m *Manager) Send(ctx context.Context, input SendInput) (DeliveryRecord, er
 		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
 
-	secretBytes, decryptErr := m.secretBox.Decrypt(channel.SecretEnc)
-	if decryptErr != nil {
-		delivery.Status = DeliveryStatusFailed
-		delivery.ErrorMsg = fmt.Sprintf("decrypt channel secret: %v", decryptErr)
-		if persistErr := m.insertDelivery(ctx, delivery); persistErr != nil {
-			return delivery, persistErr
+	var plainSecret string
+	if strings.TrimSpace(channel.SecretEnc) != "" {
+		secretBytes, decryptErr := m.secretBox.Decrypt(channel.SecretEnc)
+		if decryptErr != nil {
+			delivery.Status = DeliveryStatusFailed
+			delivery.ErrorMsg = fmt.Sprintf("decrypt channel secret: %v", decryptErr)
+			if persistErr := m.insertDelivery(ctx, delivery); persistErr != nil {
+				return delivery, persistErr
+			}
+			return delivery, fmt.Errorf("decrypt channel secret: %w", decryptErr)
 		}
-		return delivery, fmt.Errorf("decrypt channel secret: %w", decryptErr)
+		plainSecret = strings.TrimSpace(string(secretBytes))
 	}
-	plainSecret := strings.TrimSpace(string(secretBytes))
 
 	var sendErr error
 	switch channel.Kind {
@@ -408,6 +480,10 @@ func (m *Manager) Send(ctx context.Context, input SendInput) (DeliveryRecord, er
 		sendErr = m.sendTelegram(ctx, plainSecret, targetRef, title, body)
 	case KindDiscord:
 		sendErr = m.sendDiscord(ctx, plainSecret, title, body, input.PriorityTier)
+	case KindNtfy:
+		sendErr = m.sendNtfy(ctx, plainSecret, targetRef, title, body, input.PriorityTier)
+	case KindResend:
+		sendErr = m.sendResend(ctx, plainSecret, targetRef, title, body)
 	default:
 		sendErr = fmt.Errorf("%w: unsupported channel kind %q", ErrValidation, channel.Kind)
 	}
@@ -683,8 +759,12 @@ func normalizeKind(raw string) (string, error) {
 		return KindTelegram, nil
 	case KindDiscord:
 		return KindDiscord, nil
+	case KindNtfy:
+		return KindNtfy, nil
+	case KindResend:
+		return KindResend, nil
 	default:
-		return "", fmt.Errorf("%w: kind must be 'telegram' or 'discord'", ErrValidation)
+		return "", fmt.Errorf("%w: kind must be 'telegram', 'discord', 'ntfy', or 'resend'", ErrValidation)
 	}
 }
 
