@@ -1,0 +1,8 @@
+mw-echo.exe
+mw-echo
+*.db
+*.db-wal
+*.db-shm
+data/
+blobs/
+.env
