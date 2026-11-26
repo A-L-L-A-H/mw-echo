@@ -9,6 +9,7 @@ import {
   Flame,
   FolderKanban,
   Globe2,
+  HardDrive,
   KeyRound,
   Laptop,
   LayoutDashboard,
@@ -49,6 +50,7 @@ import { ArenaTab } from './components/ArenaTab';
 import { BlueprintsTab } from './components/BlueprintsTab';
 import { CoderTab } from './components/CoderTab';
 import { DesktopHostTab } from './components/DesktopHostTab';
+import { DiskDoctorTab } from './components/DiskDoctorTab';
 import { DocsTab } from './components/DocsTab';
 import { FlowsTab } from './components/FlowsTab';
 import { FreeModelsTab } from './components/FreeModelsTab';
@@ -79,7 +81,8 @@ type NavTabId =
   | 'flows'
   | 'blueprints'
   | 'vault-env'
-  | 'desktop';
+  | 'desktop'
+  | 'disk-doctor';
 
 interface NavTabMeta {
   id: NavTabId;
@@ -105,6 +108,7 @@ const NAV_TABS: NavTabMeta[] = [
   { id: 'blueprints', sceneNum: '14', stageName: 'PACKS', icon: Package },
   { id: 'vault-env', sceneNum: '15', stageName: 'SECRETS', icon: KeyRound },
   { id: 'desktop', sceneNum: '16', stageName: 'DESKTOP', icon: Laptop },
+  { id: 'disk-doctor', sceneNum: '17', stageName: 'DISK', icon: HardDrive },
 ];
 
 export function App() {
@@ -669,6 +673,10 @@ export function App() {
 
         {activeTab === 'desktop' ? (
           <DesktopHostTab onNotify={pushNotice} />
+        ) : null}
+
+        {activeTab === 'disk-doctor' ? (
+          <DiskDoctorTab onNotify={pushNotice} />
         ) : null}
       </main>
 
