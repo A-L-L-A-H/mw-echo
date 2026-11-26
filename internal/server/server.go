@@ -27,6 +27,7 @@ import (
 	"github.com/A-L-L-A-H/mw-echo/internal/flows"
 	"github.com/A-L-L-A-H/mw-echo/internal/gamification"
 	"github.com/A-L-L-A-H/mw-echo/internal/importer"
+	"github.com/A-L-L-A-H/mw-echo/internal/memvault"
 	"github.com/A-L-L-A-H/mw-echo/internal/meshfleet"
 	"github.com/A-L-L-A-H/mw-echo/internal/observatory"
 	"github.com/A-L-L-A-H/mw-echo/internal/storage"
@@ -401,6 +402,11 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	blueprintCat, err := blueprints.NewCatalog(hub)
 	if err != nil {
 		panic("init blueprints catalog: " + err.Error())
+	}
+
+	memMgr, err := memvault.NewManager(hub)
+	if err != nil {
+		panic("init memvault manager: " + err.Error())
 	}
 
 	authGuard := func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -844,7 +850,7 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 
 	// Unified MCP JSON-RPC 2.0 endpoint
 	api.POST("/mcp", func(c echo.Context) error {
-		return handleMCP(c, hub, waMgr, worldRadar, blueprintCat, flowEngine, commsMgr, vaultEnv, desktopMgr)
+		return handleMCP(c, hub, waMgr, worldRadar, blueprintCat, flowEngine, commsMgr, vaultEnv, desktopMgr, memMgr)
 	})
 
 	// Trigger matching radar_event flows whenever a World Radar instance run completes via HTTP.
@@ -903,6 +909,9 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 
 	// Intelligent Disk & Directory Doctor (17 DISK)
 	diskMgr.RegisterRoutes(api)
+
+	// Local-first Memory Vault & Hard Privacy Firewall
+	memMgr.RegisterRoutes(api)
 
 	return app
 }
@@ -965,6 +974,7 @@ func handleMCP(
 	commsMgr *comms.Manager,
 	vaultEnv *vaultenv.Vault,
 	desktopMgr *desktop.Manager,
+	memMgr *memvault.Manager,
 ) error {
 	var rpc mcpRequest
 	if err := c.Bind(&rpc); err != nil {
@@ -1007,6 +1017,7 @@ func handleMCP(
 				{"name": "echo_desktop_doctor", "description": "Run MW-ECHO desktop runtime health diagnostics and generate a redacted support report.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 				{"name": "echo_local_ai_discover", "description": "Discover local loopback AI runtimes (Ollama, LM Studio, vLLM) and available models.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 				{"name": "echo_disk_audit", "description": "Read-only disk telemetry and hotspot quick audit across local volumes (never deletes files).", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+				{"name": "echo_memvault_search", "description": "Full-text search cloud-safe public conversations in local MemVault (strictly enforces cloudSafeOnly=true privacy firewall).", "inputSchema": map[string]any{"type": "object", "required": []string{"query"}, "properties": map[string]any{"query": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
 			},
 		})
 	case "tools/call":
@@ -1122,6 +1133,8 @@ func handleMCP(
 					}
 				}
 			}
+		case "echo_memvault_search":
+			out, err = memMgr.Search(ctx, strArg("query"), true, intArg("limit", 25))
 		default:
 			return fail(-32601, "unknown tool: "+call.Name)
 		}

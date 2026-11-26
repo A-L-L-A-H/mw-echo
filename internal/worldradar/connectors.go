@@ -71,7 +71,7 @@ type ConnectorRegistry struct {
 	connectors map[string]SourceConnector
 }
 
-// NewConnectorRegistry creates a registry preloaded with rss, github, web_feed, arxiv, cyber_kev, and usgs_geo connectors.
+// NewConnectorRegistry creates a registry preloaded with rss, github, web_feed, arxiv, cyber_kev, usgs_geo, and idx_bei connectors.
 func NewConnectorRegistry() *ConnectorRegistry {
 	reg := &ConnectorRegistry{
 		connectors: make(map[string]SourceConnector),
@@ -82,6 +82,7 @@ func NewConnectorRegistry() *ConnectorRegistry {
 	reg.Register(&ArxivConnector{})
 	reg.Register(&CyberKEVConnector{})
 	reg.Register(&USGSGeoConnector{})
+	RegisterIDXConnector(reg)
 	return reg
 }
 
