@@ -112,6 +112,18 @@ func (e *Engine) ToolSpecs() []ToolSpec {
 			},
 		},
 		{
+			Name:        "search_symbols",
+			Description: "Scan workspace source files (.go, .ts, .tsx, .js, .rs, .py) for function, type, struct, interface, class, and trait declarations.",
+			ReadOnly:    true,
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{"type": "string", "description": "Optional case-insensitive symbol name substring filter."},
+					"limit": map[string]any{"type": "integer", "description": "Maximum symbols to return (default 50, max 200)."},
+				},
+			},
+		},
+		{
 			Name:        "run_shell",
 			Description: "Execute a shell command inside the workspace directory (capped at 30s default, max 120s, 12KB output). Blocked in plan mode.",
 			ReadOnly:    false,
@@ -326,6 +338,16 @@ func (e *Engine) ExecuteTool(ctx context.Context, session Session, toolName, raw
 			return "", fmt.Errorf("invalid grep_search arguments: %w", err)
 		}
 		return executeGrepSearch(ctx, session.WorkDir, args.Pattern, args.Path, args.MaxResults)
+
+	case "search_symbols":
+		var args struct {
+			Query string `json:"query"`
+			Limit int    `json:"limit"`
+		}
+		if err := json.Unmarshal([]byte(trimmedArgs), &args); err != nil {
+			return "", fmt.Errorf("invalid search_symbols arguments: %w", err)
+		}
+		return executeSearchSymbols(session.WorkDir, args.Query, args.Limit)
 
 	case "run_shell":
 		var args struct {

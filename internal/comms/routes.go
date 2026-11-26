@@ -20,6 +20,7 @@ func (m *Manager) RegisterRoutes(api *echo.Group) {
 	grp.DELETE("/channels/:id", m.handleDeleteChannel)
 	grp.POST("/send", m.handleSend)
 	grp.POST("/broadcast", m.handleBroadcast)
+	grp.POST("/alerts/dispatch", m.handleDispatchAlert)
 	grp.GET("/deliveries", m.handleListDeliveries)
 }
 
@@ -88,6 +89,18 @@ func (m *Manager) handleBroadcast(c echo.Context) error {
 		"deliveries": deliveriesList,
 		"count":      len(deliveriesList),
 	})
+}
+
+func (m *Manager) handleDispatchAlert(c echo.Context) error {
+	var incident AlertIncident
+	if err := c.Bind(&incident); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid alert incident JSON"})
+	}
+	outcome, err := m.alertBridge.Dispatch(c.Request().Context(), incident)
+	if err != nil {
+		return writeCommsError(c, err)
+	}
+	return c.JSON(http.StatusOK, outcome)
 }
 
 func (m *Manager) handleListDeliveries(c echo.Context) error {

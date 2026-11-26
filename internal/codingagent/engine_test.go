@@ -576,8 +576,8 @@ func TestHTTPRoutesEndToEndAndSSE(t *testing.T) {
 	}
 	_ = json.NewDecoder(toolsResp.Body).Decode(&toolsBody)
 	_ = toolsResp.Body.Close()
-	if toolsBody.Count != 8 {
-		t.Fatalf("expected 8 tools, got %d", toolsBody.Count)
+	if toolsBody.Count != 9 {
+		t.Fatalf("expected 9 tools, got %d", toolsBody.Count)
 	}
 
 	// 2. POST /api/agent/sessions

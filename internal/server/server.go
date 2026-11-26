@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -52,6 +53,13 @@ type Config struct {
 	WAPass          string
 	WAWebhookURL    string
 	WAWebhookSecret string
+	RIDJWKSURL      string
+	RIDIssuer       string
+	RIDAudience     string
+	RIDHTTPClient   *http.Client
+	EchoPublicURL   string
+	RIDURL          string
+	MyLoveURL       string
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -436,17 +444,49 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 		panic("init fleet manager: " + err.Error())
 	}
 
+	ridJWKSURL := firstNonEmpty(cfg.RIDJWKSURL, os.Getenv("MW_RID_JWKS_URL"))
+	ridIssuer := firstNonEmpty(cfg.RIDIssuer, os.Getenv("MW_RID_ISSUER"))
+	ridAudience := firstNonEmpty(cfg.RIDAudience, os.Getenv("MW_RID_AUDIENCE"))
+
+	var ridVerifier *RIDVerifier
+	if ridJWKSURL != "" {
+		verifier, verifierErr := NewRIDVerifier(RIDVerifierConfig{
+			JWKSURL:    ridJWKSURL,
+			Issuer:     ridIssuer,
+			Audience:   ridAudience,
+			HTTPClient: cfg.RIDHTTPClient,
+		})
+		if verifierErr != nil {
+			panic("init mw-rid verifier: " + verifierErr.Error())
+		}
+		ridVerifier = verifier
+	}
+
+	staticAuthToken := strings.TrimSpace(cfg.AuthToken)
+	authEnabled := staticAuthToken != "" || ridVerifier != nil
+
 	authGuard := func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			if strings.TrimSpace(cfg.AuthToken) == "" {
+			if !authEnabled {
 				return next(c)
 			}
 			header := strings.TrimSpace(c.Request().Header.Get("Authorization"))
-			provided := strings.TrimPrefix(header, "Bearer ")
-			if header == provided || subtle.ConstantTimeCompare([]byte(provided), []byte(cfg.AuthToken)) != 1 {
+			provided, hasBearer := strings.CutPrefix(header, "Bearer ")
+			provided = strings.TrimSpace(provided)
+			if !hasBearer || provided == "" {
 				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			}
-			return next(c)
+			if staticAuthToken != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(staticAuthToken)) == 1 {
+				return next(c)
+			}
+			if ridVerifier != nil {
+				claims, verifyErr := ridVerifier.VerifyAccessToken(c.Request().Context(), provided)
+				if verifyErr == nil {
+					c.Set("rid_claims", claims)
+					return next(c)
+				}
+			}
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		}
 	}
 
@@ -494,32 +534,50 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 		})
 	})
 
-	// Pocket pairing config for mw-pocket mobile companion
+	// Mobile pairing discovery for mw-pocket. Intentionally public so mobile clients can
+	// discover endpoints and capabilities before sign-in; never exposes raw secret tokens.
 	app.GET("/api/pocket/pair-config", func(c echo.Context) error {
-		// Build pair config using configured URLs and env vars
-		pairUri := os.Getenv("MW_POCKET_PAIR_URI")
-		echoUrl := os.Getenv("MW_ECHO_URL")
-		ridUrl := os.Getenv("MW_RID_URL")
-		myloveUrl := os.Getenv("MW_MYLOVE_URL")
-		capabilities := []string{"tasks", "fleet", "storage", "comms", "worldradar"}
-		version := "1.0.0"
-
-		// If static auth is enabled (AuthToken set), require authentication for pair-config
-		if strings.TrimSpace(cfg.AuthToken) != "" {
-			header := strings.TrimSpace(c.Request().Header.Get("Authorization"))
-			provided := strings.TrimPrefix(header, "Bearer ")
-			if header == provided || subtle.ConstantTimeCompare([]byte(provided), []byte(cfg.AuthToken)) != 1 {
-				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		echoURL := firstNonEmpty(cfg.EchoPublicURL, os.Getenv("MW_ECHO_PUBLIC_URL"))
+		if echoURL == "" {
+			scheme := "http"
+			if c.Request().TLS != nil {
+				scheme = "https"
 			}
+			host := strings.TrimSpace(c.Request().Host)
+			if host == "" {
+				host = strings.TrimSpace(cfg.Addr)
+			}
+			if host == "" {
+				host = "127.0.0.1:4310"
+			}
+			echoURL = scheme + "://" + host
 		}
+		ridURL := firstNonEmpty(cfg.RIDURL, os.Getenv("MW_RID_URL"), "http://127.0.0.1:4320")
+		myloveURL := firstNonEmpty(cfg.MyLoveURL, os.Getenv("MW_MYLOVE_URL"), "http://127.0.0.1:4330")
+
+		pairQuery := url.Values{}
+		pairQuery.Set("echo", echoURL)
+		pairQuery.Set("rid", ridURL)
+		pairQuery.Set("mylove", myloveURL)
 
 		return c.JSON(http.StatusOK, map[string]any{
-			"pairUri":      pairUri,
-			"echoUrl":      echoUrl,
-			"ridUrl":       ridUrl,
-			"myloveUrl":    myloveUrl,
-			"capabilities": capabilities,
-			"version":      version,
+			"pairUri":      "mwpocket://pair?" + pairQuery.Encode(),
+			"echoUrl":      echoURL,
+			"ridUrl":       ridURL,
+			"myloveUrl":    myloveURL,
+			"authRequired": authEnabled,
+			"capabilities": []string{
+				"tasks",
+				"docs",
+				"storage",
+				"radar",
+				"comms",
+				"coder",
+				"fleet",
+				"whatsapp",
+				"ai-gateway",
+			},
+			"version": "2.0.0",
 		})
 	})
 
@@ -854,6 +912,24 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 		})
 	})
 
+	api.POST("/storage/restore/verify", func(c echo.Context) error {
+		var req struct {
+			ObjectID  string `json:"objectId"`
+			ObjectKey string `json:"objectKey"`
+		}
+		if c.Request().Body != nil && c.Request().ContentLength != 0 {
+			if err := c.Bind(&req); err != nil {
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid restore verify JSON"})
+			}
+		}
+		targetID := firstNonEmpty(req.ObjectID, req.ObjectKey)
+		report, err := pool.VerifyLatestBackupSnapshot(c.Request().Context(), targetID)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		}
+		return c.JSON(http.StatusOK, report)
+	})
+
 	api.GET("/storage/:id/download", func(c echo.Context) error {
 		obj, stream, err := pool.OpenDownload(c.Request().Context(), c.Param("id"))
 		if errors.Is(err, sql.ErrNoRows) {
@@ -906,7 +982,7 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 
 	// Unified MCP JSON-RPC 2.0 endpoint
 	api.POST("/mcp", func(c echo.Context) error {
-		return handleMCP(c, hub, waMgr, worldRadar, blueprintCat, flowEngine, commsMgr, vaultEnv, desktopMgr, memMgr, fleetMgr)
+		return handleMCP(c, hub, pool, waMgr, worldRadar, blueprintCat, flowEngine, commsMgr, vaultEnv, desktopMgr, memMgr, fleetMgr)
 	})
 
 	// Trigger matching radar_event flows whenever a World Radar instance run completes via HTTP.
@@ -1024,9 +1100,19 @@ type mcpRequest struct {
 	Params  json.RawMessage `json:"params"`
 }
 
+func firstNonEmpty(values ...string) string {
+	for _, candidate := range values {
+		if trimmed := strings.TrimSpace(candidate); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 func handleMCP(
 	c echo.Context,
 	hub *store.HubStore,
+	pool *storage.PoolManager,
 	waMgr *whatsapp.Manager,
 	worldRadar *worldradar.Engine,
 	blueprintCat *blueprints.Catalog,
@@ -1081,6 +1167,7 @@ func handleMCP(
 				{"name": "echo_memvault_search", "description": "Full-text search cloud-safe public conversations in local MemVault (strictly enforces cloudSafeOnly=true privacy firewall).", "inputSchema": map[string]any{"type": "object", "required": []string{"query"}, "properties": map[string]any{"query": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
 				{"name": "echo_fleet_probe", "description": "Concurrently probe /health across all registered Sovereign Fleet services.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 				{"name": "echo_arsy_audit_verify", "description": "Verify the SHA-256 Merkle hash chain integrity of the ARSY constitutional audit log.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+				{"name": "echo_storage_restore_verify", "description": "Run a non-destructive 9Drive SQLite backup restore & PRAGMA integrity_check verification drill.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"objectId": map[string]string{"type": "string"}}}},
 			},
 		})
 	case "tools/call":
@@ -1202,6 +1289,8 @@ func handleMCP(
 			out, err = fleetMgr.ProbeFleet(ctx)
 		case "echo_arsy_audit_verify":
 			out, err = fleetMgr.VerifyAuditChain(ctx)
+		case "echo_storage_restore_verify":
+			out, err = pool.VerifyLatestBackupSnapshot(ctx, firstNonEmpty(strArg("objectId"), strArg("objectKey")))
 		default:
 			return fail(-32601, "unknown tool: "+call.Name)
 		}

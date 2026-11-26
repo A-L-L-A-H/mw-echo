@@ -109,6 +109,7 @@ type Manager struct {
 	secretBox       *storage.SecretBox
 	httpClient      *http.Client
 	telegramAPIBase string
+	alertBridge     *AlertBridge
 }
 
 type channelWithSecret struct {
@@ -144,11 +145,17 @@ func NewManager(hub *store.HubStore, opts Options) (*Manager, error) {
 		httpClient:      client,
 		telegramAPIBase: tgBase,
 	}
+	mgr.alertBridge = NewAlertBridge(mgr, defaultAlertCooldown)
 
 	if err := mgr.migrate(); err != nil {
 		return nil, fmt.Errorf("comms migrate: %w", err)
 	}
 	return mgr, nil
+}
+
+// AlertBridge returns the cooldown-deduplicated alert router attached to this Manager.
+func (m *Manager) AlertBridge() *AlertBridge {
+	return m.alertBridge
 }
 
 func (m *Manager) migrate() error {

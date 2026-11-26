@@ -3,7 +3,6 @@ package server_test
 import (
 	"context"
 	"crypto"
-	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -12,255 +11,221 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/A-L-L-A-H/mw-echo/internal/server"
+	"github.com/A-L-L-A-H/mw-echo/internal/store"
 )
 
-func TestRS256JWKSVerifier(t *testing.T) {
-	// Generate an RSA key pair for testing
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+func mustGenerateRSAKey(t *testing.T) *rsa.PrivateKey {
+	t.Helper()
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		t.Fatalf("failed to generate RSA key: %v", err)
+		t.Fatalf("generate rsa key: %v", err)
 	}
+	return priv
+}
 
-	// Create RS256 JWT token manually (no external deps)
-	header := map[string]any{
+func makeJWK(kid string, pub *rsa.PublicKey) map[string]string {
+	return map[string]string{
+		"kty": "RSA",
+		"use": "sig",
 		"alg": "RS256",
-		"typ": "JWT",
-		"kid": "test-key-1",
+		"kid": kid,
+		"n":   base64.RawURLEncoding.EncodeToString(pub.N.Bytes()),
+		"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(pub.E)).Bytes()),
 	}
-	payload := map[string]any{
-		"iss":       "https://rid.example.com",
-		"sub":       "user-123",
-		"aud":       "mw-echo",
-		"exp":       time.Now().Add(time.Hour).Unix(),
-		"nbf":       time.Now().Unix(),
-		"scope":     "read:tasks",
-		"client_id": "client-abc",
-		"token_use": "access",
-	}
+}
 
-	tokenString, err := signRS256Token(header, payload, privateKey)
+func signRS256JWT(t *testing.T, priv *rsa.PrivateKey, header map[string]any, payload map[string]any) string {
+	t.Helper()
+	hdrBytes, _ := json.Marshal(header)
+	payBytes, _ := json.Marshal(payload)
+	signingInput := base64.RawURLEncoding.EncodeToString(hdrBytes) + "." + base64.RawURLEncoding.EncodeToString(payBytes)
+	digest := sha256.Sum256([]byte(signingInput))
+	sig, err := rsa.SignPKCS1v15(rand.Reader, priv, crypto.SHA256, digest[:])
 	if err != nil {
-		t.Fatalf("failed to sign RS256 token: %v", err)
+		t.Fatalf("sign jwt: %v", err)
 	}
+	return signingInput + "." + base64.RawURLEncoding.EncodeToString(sig)
+}
 
-	// Create JWKS endpoint response first
-	jwksResponse := map[string]any{
-		"keys": []map[string]any{
-			{
-				"kty": "RSA",
-				"kid": "test-key-1",
-				"use": "sig",
-				"alg": "RS256",
-				"n":   base64.RawURLEncoding.EncodeToString(privateKey.N.Bytes()),
-				"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(65537).Bytes()),
-			},
-		},
-	}
+func TestRIDVerifierADR001AndKeyRotation(t *testing.T) {
+	keyOne := mustGenerateRSAKey(t)
+	keyTwo := mustGenerateRSAKey(t)
 
-	// Set up mock JWKS server so we can reference its URL
+	var rotateToTwo atomic.Bool
+	var jwksFetches atomic.Int32
 	jwksServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		jwksFetches.Add(1)
+		keys := []map[string]string{makeJWK("kid-1", &keyOne.PublicKey)}
+		if rotateToTwo.Load() {
+			keys = append(keys, makeJWK("kid-2", &keyTwo.PublicKey))
+		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(jwksResponse)
+		_ = json.NewEncoder(w).Encode(map[string]any{"keys": keys})
 	}))
 	defer jwksServer.Close()
 
-	// Create verifier config
-	jwksURL := jwksServer.URL
-	cfg := server.RIDVerifierConfig{
-		JWKSURL:    jwksURL,
-		Issuer:     "https://rid.example.com",
+	verifier, err := server.NewRIDVerifier(server.RIDVerifierConfig{
+		JWKSURL:    jwksServer.URL,
+		Issuer:     "https://rid.moonwitness.local",
 		Audience:   "mw-echo",
-		CacheTTL:   5 * time.Minute,
-		HTTPClient: &http.Client{Timeout: 10 * time.Second},
-		Now:        time.Now,
-	}
-
-	verifier, err := server.NewRIDVerifier(cfg)
+		HTTPClient: jwksServer.Client(),
+	})
 	if err != nil {
-		t.Fatalf("failed to create RID verifier: %v", err)
+		t.Fatalf("new rid verifier: %v", err)
 	}
 
-	// Test successful verification
-	claimsResult, err := verifier.VerifyAccessToken(context.Background(), tokenString)
+	now := time.Now().UTC().Unix()
+	validToken := signRS256JWT(t, keyOne,
+		map[string]any{"alg": "RS256", "typ": "at+jwt", "kid": "kid-1"},
+		map[string]any{
+			"iss":       "https://rid.moonwitness.local",
+			"sub":       "user-42",
+			"aud":       []string{"mw-echo", "mw-pocket"},
+			"exp":       now + 300,
+			"nbf":       now - 10,
+			"token_use": "access",
+		},
+	)
+	claims, err := verifier.VerifyAccessToken(context.Background(), validToken)
 	if err != nil {
-		t.Fatalf("unexpected verification error: %v", err)
+		t.Fatalf("expected valid RS256 token to pass, got: %v", err)
+	}
+	if claims.Subject != "user-42" || claims.KeyID != "kid-1" {
+		t.Fatalf("unexpected claims: %+v", claims)
 	}
 
-	if claimsResult.Issuer != "https://rid.example.com" {
-		t.Errorf("expected issuer 'https://rid.example.com', got '%s'", claimsResult.Issuer)
-	}
-	if claimsResult.Subject != "user-123" {
-		t.Errorf("expected subject 'user-123', got '%s'", claimsResult.Subject)
-	}
-	if !contains(claimsResult.Audience, "mw-echo") {
-		t.Errorf("expected audience 'mw-echo'")
-	}
-	if claimsResult.Scope != "read:tasks" {
-		t.Errorf("expected scope 'read:tasks', got '%s'", claimsResult.Scope)
-	}
-	if claimsResult.ClientID != "client-abc" {
-		t.Errorf("expected client_id 'client-abc', got '%s'", claimsResult.ClientID)
-	}
-	if claimsResult.KeyID != "test-key-1" {
-		t.Errorf("expected key_id 'test-key-1', got '%s'", claimsResult.KeyID)
+	// Reject alg != RS256 (HS256 and none)
+	hs256Token := signRS256JWT(t, keyOne,
+		map[string]any{"alg": "HS256", "typ": "at+jwt", "kid": "kid-1"},
+		map[string]any{"iss": "https://rid.moonwitness.local", "aud": "mw-echo", "exp": now + 300},
+	)
+	if _, err := verifier.VerifyAccessToken(context.Background(), hs256Token); err == nil {
+		t.Fatalf("expected HS256 token to be rejected")
 	}
 
-	t.Logf("RS256 verifier successful verification test passed")
-
-	// Test HS256 rejection
-	hs256Token := jwtManualSignHS256(map[string]any{
-		"alg": "HS256",
-		"typ": "JWT",
-	}, map[string]any{
-		"iss": "https://rid.example.com",
-		"sub": "user-123",
-		"exp": time.Now().Add(time.Hour).Unix(),
-	}, []byte("secret"))
-
-	_, err = verifier.VerifyAccessToken(context.Background(), hs256Token)
-	if err == nil {
-		t.Error("expected HS256 token to be rejected")
+	noneToken := signRS256JWT(t, keyOne,
+		map[string]any{"alg": "none", "typ": "at+jwt", "kid": "kid-1"},
+		map[string]any{"iss": "https://rid.moonwitness.local", "aud": "mw-echo", "exp": now + 300},
+	)
+	if _, err := verifier.VerifyAccessToken(context.Background(), noneToken); err == nil {
+		t.Fatalf("expected alg=none token to be rejected")
 	}
 
-	t.Logf("HS256 rejection test passed")
+	// Reject token_use == "id"
+	idToken := signRS256JWT(t, keyOne,
+		map[string]any{"alg": "RS256", "typ": "at+jwt", "kid": "kid-1"},
+		map[string]any{"iss": "https://rid.moonwitness.local", "aud": "mw-echo", "exp": now + 300, "token_use": "id"},
+	)
+	if _, err := verifier.VerifyAccessToken(context.Background(), idToken); err == nil {
+		t.Fatalf("expected OIDC id token to be rejected")
+	}
 
-	// Test 'none' algorithm rejection
-	noneToken := jwtManualSignNone(map[string]any{
-		"alg": "none",
-		"typ": "JWT",
-	}, map[string]any{
-		"iss": "https://rid.example.com",
-		"sub": "user-123",
-		"exp": time.Now().Add(time.Hour).Unix(),
+	// Reject expired token
+	expiredToken := signRS256JWT(t, keyOne,
+		map[string]any{"alg": "RS256", "typ": "at+jwt", "kid": "kid-1"},
+		map[string]any{"iss": "https://rid.moonwitness.local", "aud": "mw-echo", "exp": now - 5},
+	)
+	if _, err := verifier.VerifyAccessToken(context.Background(), expiredToken); err == nil {
+		t.Fatalf("expected expired token to be rejected")
+	}
+
+	// Reject future nbf
+	futureNbfToken := signRS256JWT(t, keyOne,
+		map[string]any{"alg": "RS256", "typ": "at+jwt", "kid": "kid-1"},
+		map[string]any{"iss": "https://rid.moonwitness.local", "aud": "mw-echo", "exp": now + 300, "nbf": now + 120},
+	)
+	if _, err := verifier.VerifyAccessToken(context.Background(), futureNbfToken); err == nil {
+		t.Fatalf("expected future nbf token to be rejected")
+	}
+
+	// Refresh JWKS automatically on unknown kid
+	rotateToTwo.Store(true)
+	rotatedToken := signRS256JWT(t, keyTwo,
+		map[string]any{"alg": "RS256", "typ": "at+jwt", "kid": "kid-2"},
+		map[string]any{"iss": "https://rid.moonwitness.local", "sub": "user-rotated", "aud": "mw-echo", "exp": now + 300},
+	)
+	rotatedClaims, err := verifier.VerifyAccessToken(context.Background(), rotatedToken)
+	if err != nil {
+		t.Fatalf("expected unknown kid to trigger JWKS refresh and succeed, got: %v", err)
+	}
+	if rotatedClaims.Subject != "user-rotated" || jwksFetches.Load() < 2 {
+		t.Fatalf("expected JWKS refresh count >= 2, got %d (claims=%+v)", jwksFetches.Load(), rotatedClaims)
+	}
+}
+
+func TestDualAuthMiddlewareAndPocketPairConfig(t *testing.T) {
+	privKey := mustGenerateRSAKey(t)
+	jwksServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{makeJWK("kid-auth", &privKey.PublicKey)}})
+	}))
+	defer jwksServer.Close()
+
+	hub, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open hub store: %v", err)
+	}
+	defer func() { _ = hub.Close() }()
+
+	handler := server.NewEcho(hub, server.Config{
+		Addr:          "127.0.0.1:4310",
+		AuthToken:     "static-secret-token",
+		RIDJWKSURL:    jwksServer.URL,
+		RIDIssuer:     "https://rid.moonwitness.local",
+		RIDAudience:   "mw-echo",
+		RIDHTTPClient: jwksServer.Client(),
+		EchoPublicURL: "https://echo.moonwitness.local",
+		RIDURL:        "https://rid.moonwitness.local",
+		MyLoveURL:     "https://mylove.moonwitness.local",
 	})
 
-	_, err = verifier.VerifyAccessToken(context.Background(), noneToken)
-	if err == nil {
-		t.Error("expected 'none' algorithm token to be rejected")
+	// Unauthenticated /api/stats rejected
+	unauthRec := httptest.NewRecorder()
+	handler.ServeHTTP(unauthRec, httptest.NewRequest(http.MethodGet, "/api/stats", nil))
+	if unauthRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 without auth, got %d", unauthRec.Code)
 	}
 
-	t.Logf("'none' algorithm rejection test passed")
-
-	// Test ID token rejection
-	idTokenPayload := map[string]any{
-		"iss":       "https://rid.example.com",
-		"sub":       "user-123",
-		"exp":       time.Now().Add(time.Hour).Unix(),
-		"token_use": "id",
-		"at_hash":   "some-hash",
-		"c_hash":    "some-c-hash",
-	}
-	idToken, _ := signRS256Token(map[string]any{"alg": "RS256", "typ": "JWT"}, idTokenPayload, privateKey)
-
-	_, err = verifier.VerifyAccessToken(context.Background(), idToken)
-	if err == nil {
-		t.Error("expected ID token to be rejected")
+	// Static token accepted
+	staticReq := httptest.NewRequest(http.MethodGet, "/api/stats", nil)
+	staticReq.Header.Set("Authorization", "Bearer static-secret-token")
+	staticRec := httptest.NewRecorder()
+	handler.ServeHTTP(staticRec, staticReq)
+	if staticRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 with static token, got %d", staticRec.Code)
 	}
 
-	t.Logf("ID token rejection test passed")
-
-	// Test audience mismatch
-	audToken, _ := signRS256Token(map[string]any{"alg": "RS256", "typ": "JWT"}, map[string]any{
-		"iss":   "https://rid.example.com",
-		"sub":   "user-123",
-		"exp":   time.Now().Add(time.Hour).Unix(),
-		"aud":   "wrong-audience",
-		"scope": "read:tasks",
-	}, privateKey)
-
-	_, err = verifier.VerifyAccessToken(context.Background(), audToken)
-	if err == nil {
-		t.Error("expected audience mismatch to be rejected")
+	// Valid mw-rid RS256 Bearer JWT accepted
+	now := time.Now().UTC().Unix()
+	jwtToken := signRS256JWT(t, privKey,
+		map[string]any{"alg": "RS256", "typ": "at+jwt", "kid": "kid-auth"},
+		map[string]any{"iss": "https://rid.moonwitness.local", "sub": "mobile-user", "aud": "mw-echo", "exp": now + 300},
+	)
+	jwtReq := httptest.NewRequest(http.MethodGet, "/api/stats", nil)
+	jwtReq.Header.Set("Authorization", "Bearer "+jwtToken)
+	jwtRec := httptest.NewRecorder()
+	handler.ServeHTTP(jwtRec, jwtReq)
+	if jwtRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 with mw-rid JWT, got %d: %s", jwtRec.Code, jwtRec.Body.String())
 	}
 
-	t.Logf("audience mismatch rejection test passed")
-
-	// Test missing exp claim
-	noExpToken, _ := signRS256Token(map[string]any{"alg": "RS256", "typ": "JWT"}, map[string]any{
-		"iss": "https://rid.example.com",
-		"sub": "user-123",
-	}, privateKey)
-
-	_, err = verifier.VerifyAccessToken(context.Background(), noExpToken)
-	if err == nil {
-		t.Error("expected missing exp to be rejected")
+	// GET /api/pocket/pair-config is accessible without exposing raw secret token
+	pairRec := httptest.NewRecorder()
+	handler.ServeHTTP(pairRec, httptest.NewRequest(http.MethodGet, "/api/pocket/pair-config", nil))
+	if pairRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on pair-config, got %d: %s", pairRec.Code, pairRec.Body.String())
 	}
-
-	t.Logf("missing exp rejection test passed")
-
-	// Test nbf not yet valid
-	nbfFutureToken, _ := signRS256Token(map[string]any{"alg": "RS256", "typ": "JWT"}, map[string]any{
-		"iss":   "https://rid.example.com",
-		"sub":   "user-123",
-		"exp":   time.Now().Add(time.Hour).Unix(),
-		"nbf":   time.Now().Add(24 * time.Hour).Unix(),
-		"scope": "read:tasks",
-	}, privateKey)
-
-	_, err = verifier.VerifyAccessToken(context.Background(), nbfFutureToken)
-	if err == nil {
-		t.Error("expected nbf future rejection")
+	pairBody := pairRec.Body.String()
+	if strings.Contains(pairBody, "static-secret-token") {
+		t.Fatalf("pair-config must never expose raw static auth token: %s", pairBody)
 	}
-
-	t.Logf("nbf future rejection test passed")
-
-	t.Logf("All RS256 JWKS verifier tests passed!")
-}
-
-func signRS256Token(header, payload map[string]any, privKey *rsa.PrivateKey) (string, error) {
-	headerBytes, _ := json.Marshal(header)
-	payloadBytes, _ := json.Marshal(payload)
-
-	headerEncoded := base64.RawURLEncoding.EncodeToString(headerBytes)
-	payloadEncoded := base64.RawURLEncoding.EncodeToString(payloadBytes)
-	signingInput := headerEncoded + "." + payloadEncoded
-
-	digest := sha256.Sum256([]byte(signingInput))
-	signature, err := rsa.SignPKCS1v15(rand.Reader, privKey, crypto.SHA256, digest[:])
-	if err != nil {
-		return "", err
+	if !strings.Contains(pairBody, `"pairUri":"mwpocket://pair?`) || !strings.Contains(pairBody, `"echoUrl":"https://echo.moonwitness.local"`) {
+		t.Fatalf("unexpected pair-config payload: %s", pairBody)
 	}
-	signatureEncoded := base64.RawURLEncoding.EncodeToString(signature)
-
-	return signingInput + "." + signatureEncoded, nil
-}
-
-func jwtManualSignHS256(header, payload map[string]any, secret []byte) string {
-	headerBytes, _ := json.Marshal(header)
-	payloadBytes, _ := json.Marshal(payload)
-	headerEncoded := base64.RawURLEncoding.EncodeToString(headerBytes)
-	payloadEncoded := base64.RawURLEncoding.EncodeToString(payloadBytes)
-	signingInput := headerEncoded + "." + payloadEncoded
-
-	// Simple HMAC256 signature for testing (will be rejected by RS256 verifier)
-	mac := simpleHMACSHA256(secret, []byte(signingInput))
-	return signingInput + "." + base64.RawURLEncoding.EncodeToString(mac)
-}
-
-func simpleHMACSHA256(key, data []byte) []byte {
-	mac := hmac.New(sha256.New, key)
-	_, _ = mac.Write(data)
-	return mac.Sum(nil)
-}
-
-func jwtManualSignNone(header, payload map[string]any) string {
-	headerBytes, _ := json.Marshal(header)
-	payloadBytes, _ := json.Marshal(payload)
-	headerEncoded := base64.RawURLEncoding.EncodeToString(headerBytes)
-	payloadEncoded := base64.RawURLEncoding.EncodeToString(payloadBytes)
-	signingInput := headerEncoded + "." + payloadEncoded
-	return signingInput + "."
-}
-
-func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
 }
