@@ -22,6 +22,7 @@ func (m *Manager) RegisterRoutes(api *echo.Group) {
 	grp.POST("/broadcast", m.handleBroadcast)
 	grp.POST("/alerts/dispatch", m.handleDispatchAlert)
 	grp.GET("/deliveries", m.handleListDeliveries)
+	grp.POST("/inbound-email", m.handleInboundEmail)
 }
 
 func (m *Manager) handleListChannels(c echo.Context) error {
