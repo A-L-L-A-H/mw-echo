@@ -20,7 +20,13 @@ import {
   type ProjectSummary,
   type TaskRecord,
 } from '../api';
-import { MonoBadge, SectionCard, type BadgeTone } from './UiPrimitives';
+import {
+  ComicSticker,
+  MonoBadge,
+  SectionCard,
+  StageHeroBanner,
+  type BadgeTone,
+} from './UiPrimitives';
 
 interface TasksTabProps {
   projects: ProjectSummary[];
@@ -37,37 +43,47 @@ interface KanbanColumnDef {
   id: KanbanColumnId;
   title: string;
   targetStatus: string;
-  accentHex: string;
+  headerBg: string;
+  headerText: string;
+  shadowColor: string;
   badgeTone: BadgeTone;
 }
 
 const KANBAN_COLUMNS: KanbanColumnDef[] = [
   {
     id: 'todo',
-    title: 'TODO / BACKLOG',
+    title: 'QUEUED',
     targetStatus: 'todo',
-    accentHex: '#00b8f0',
+    headerBg: '#00f0ff',
+    headerText: '#08080c',
+    shadowColor: '#00f0ff',
     badgeTone: 'cyan',
   },
   {
     id: 'doing',
-    title: 'DOING / IN PROGRESS',
+    title: 'IN COMBAT',
     targetStatus: 'doing',
-    accentHex: '#ffe031',
+    headerBg: '#ffe031',
+    headerText: '#08080c',
+    shadowColor: '#ffe031',
     badgeTone: 'yellow',
   },
   {
     id: 'blocked',
-    title: 'BLOCKED',
+    title: 'JAMMED',
     targetStatus: 'blocked',
-    accentHex: '#ef4444',
+    headerBg: '#ff334b',
+    headerText: '#ffffff',
+    shadowColor: '#ff334b',
     badgeTone: 'err',
   },
   {
     id: 'done',
-    title: 'DONE',
+    title: 'CLEARED',
     targetStatus: 'done',
-    accentHex: '#22c55e',
+    headerBg: '#a3ff12',
+    headerText: '#08080c',
+    shadowColor: '#a3ff12',
     badgeTone: 'ok',
   },
 ];
@@ -116,7 +132,7 @@ export function TasksTab({
   const [statusFilter, setStatusFilter] = useState('');
   const [milestoneFilter, setMilestoneFilter] = useState('');
 
-  // Create task drawer/form
+  // Create task form
   const [createOpen, setCreateOpen] = useState(false);
   const [newCode, setNewCode] = useState('');
   const [newProject, setNewProject] = useState(selectedProject || 'moonwitness');
@@ -236,7 +252,7 @@ export function TasksTab({
     try {
       await deleteTask(taskCode);
       setTasksList((prev) => prev.filter((taskRecord) => taskRecord.code !== taskCode));
-      onNotify('ok', `Deleted task ${taskCode}.`);
+      onNotify('ok', `Eliminated bounty ${taskCode}.`);
       await onTasksChanged();
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : 'Failed to delete task';
@@ -272,7 +288,7 @@ export function TasksTab({
       setNewSummary('');
       setNewTagsInput('');
       setCreateOpen(false);
-      onNotify('ok', `Created task ${newCode.trim().toUpperCase()}.`);
+      onNotify('ok', `Posted bounty ${newCode.trim().toUpperCase()}.`);
       await loadTasks();
       await onTasksChanged();
     } catch (caughtError) {
@@ -308,34 +324,35 @@ export function TasksTab({
   };
 
   return (
-    <div className="space-y-4">
-      <SectionCard
-        title="Task Management (TaskOS v2)"
-        subtitle="Switch between Kanban Board and Table View, filter by project/milestone/priority, and move work across stages."
-        icon={<CheckSquare className="h-4 w-4" />}
+    <div className="space-y-5">
+      <StageHeroBanner
+        sceneCode="SCENE 03"
+        sticker="BOUNTY BOARD"
+        title="WANTED MISSIONS & TASKOS V2"
+        subtitle="QUEUED // IN COMBAT // JAMMED // CLEARED — KANBAN STRIKE LANES OR DENSE INTEL TABLE"
+        tone="magenta"
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Kanban vs Table toggle */}
-            <div className="inline-flex overflow-hidden rounded border border-[#2a2a36] bg-[#0d0d10]">
+          <>
+            <div className="inline-flex border-[2.5px] border-black bg-[#08080c] shadow-[4px_4px_0_#000]">
               <button
                 type="button"
                 onClick={() => setViewMode('board')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-xs font-bold transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-xs font-extrabold uppercase ${
                   viewMode === 'board'
-                    ? 'bg-[#ffe031] text-[#0d0d10]'
-                    : 'text-[#9c988c] hover:text-[#f3efe4]'
+                    ? 'bg-[#ffe031] text-[#08080c]'
+                    : 'text-[#a6a2b8] hover:text-[#fff6de]'
                 }`}
               >
                 <Kanban className="h-3.5 w-3.5" />
-                KANBAN
+                BOUNTY BOARD
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('table')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-xs font-bold transition-colors ${
+                className={`inline-flex items-center gap-1.5 border-l-2 border-black px-3 py-1.5 font-mono text-xs font-extrabold uppercase ${
                   viewMode === 'table'
-                    ? 'bg-[#ffe031] text-[#0d0d10]'
-                    : 'text-[#9c988c] hover:text-[#f3efe4]'
+                    ? 'bg-[#ffe031] text-[#08080c]'
+                    : 'text-[#a6a2b8] hover:text-[#fff6de]'
                 }`}
               >
                 <Table2 className="h-3.5 w-3.5" />
@@ -347,18 +364,18 @@ export function TasksTab({
               type="button"
               disabled={exportingJson}
               onClick={() => void handleExportTasksJson()}
-              className="inline-flex items-center gap-1.5 rounded border border-[#2a2a36] bg-[#1c1c23] px-3 py-1.5 font-mono text-xs font-semibold text-[#00b8f0] hover:border-[#00b8f0] disabled:opacity-50"
+              className="riot-btn inline-flex items-center gap-1.5 bg-[#00f0ff] px-3 py-1.5 font-mono text-xs font-extrabold text-[#08080c] disabled:opacity-50"
             >
               <Download className="h-3.5 w-3.5" />
-              EXPORT tasks.json
+              EXPORT JSON
             </button>
 
             <a
               href="/api/export/tasks.json"
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 rounded border border-[#2a2a36] bg-[#1c1c23] px-2 py-1.5 font-mono text-xs text-[#9c988c] hover:text-[#f3efe4]"
-              title="Open raw tasks.json in new tab"
+              className="riot-btn inline-flex items-center bg-[#1b1b2b] px-2.5 py-1.5 text-[#fff6de]"
+              title="Open raw tasks.json"
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
@@ -366,24 +383,31 @@ export function TasksTab({
             <button
               type="button"
               onClick={() => setCreateOpen((prev) => !prev)}
-              className="inline-flex items-center gap-1.5 rounded bg-[#ffe031] px-3.5 py-1.5 font-mono text-xs font-extrabold text-[#0d0d10] hover:opacity-90"
+              className="riot-btn inline-flex items-center gap-1.5 bg-[#ff2e88] px-4 py-1.5 font-display text-xs text-white uppercase"
             >
-              <Plus className="h-3.5 w-3.5" />
-              NEW TASK
+              <Plus className="h-4 w-4" />
+              POST BOUNTY
             </button>
-          </div>
+          </>
         }
+      />
+
+      <SectionCard
+        title="MISSION FILTER DECK"
+        icon={<CheckSquare className="h-4 w-4" />}
+        sticker={`${filteredTasks.length} ACTIVE`}
+        stickerTone="yellow"
       >
-        {/* Filter Toolbar */}
+        {/* Filter Bar */}
         <div className="mb-4 grid grid-cols-1 gap-2.5 md:grid-cols-12">
           <div className="relative md:col-span-4">
-            <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-[#9c988c]" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#ffe031]" />
             <input
               type="search"
               value={searchQuery}
               onChange={(ev) => setSearchQuery(ev.target.value)}
-              placeholder="Search code, title, summary..."
-              className="w-full rounded border border-[#2a2a36] bg-[#0d0d10] py-2 pr-3 pl-9 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+              placeholder="Search bounty code, title, summary..."
+              className="riot-input w-full py-2 pr-3 pl-9 font-mono text-xs"
             />
           </div>
 
@@ -393,9 +417,9 @@ export function TasksTab({
               onSelectProject(ev.target.value);
               setMilestoneFilter('');
             }}
-            className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none md:col-span-2"
+            className="riot-input px-2.5 py-2 font-mono text-xs font-bold md:col-span-2"
           >
-            <option value="">All Projects</option>
+            <option value="">All Arcs</option>
             {projectOptions.map((slug) => (
               <option key={slug} value={slug}>
                 {slug}
@@ -406,9 +430,9 @@ export function TasksTab({
           <select
             value={milestoneFilter}
             onChange={(ev) => setMilestoneFilter(ev.target.value)}
-            className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none md:col-span-2"
+            className="riot-input px-2.5 py-2 font-mono text-xs font-bold md:col-span-2"
           >
-            <option value="">All Milestones</option>
+            <option value="">All Chapters</option>
             {milestoneOptions.map((msName) => (
               <option key={msName} value={msName}>
                 {msName}
@@ -419,20 +443,20 @@ export function TasksTab({
           <select
             value={priorityFilter}
             onChange={(ev) => setPriorityFilter(ev.target.value)}
-            className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none md:col-span-2"
+            className="riot-input px-2.5 py-2 font-mono text-xs font-bold md:col-span-2"
           >
-            <option value="">All Priorities</option>
-            <option value="p0">p0 (Critical)</option>
-            <option value="p1">p1 (High)</option>
-            <option value="p2">p2 (Normal)</option>
-            <option value="p3">p3 (Low)</option>
+            <option value="">All Threat Tiers</option>
+            <option value="p0">P0 (BOSS)</option>
+            <option value="p1">P1 (HIGH)</option>
+            <option value="p2">P2 (STD)</option>
+            <option value="p3">P3 (LOW)</option>
           </select>
 
           <div className="flex gap-2 md:col-span-2">
             <select
               value={statusFilter}
               onChange={(ev) => setStatusFilter(ev.target.value)}
-              className="min-w-0 flex-1 rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+              className="riot-input min-w-0 flex-1 px-2.5 py-2 font-mono text-xs font-bold"
             >
               <option value="">All Status</option>
               <option value="todo">todo</option>
@@ -445,26 +469,26 @@ export function TasksTab({
             <button
               type="button"
               onClick={() => void loadTasks()}
-              className="rounded border border-[#2a2a36] bg-[#1c1c23] px-2.5 py-2 text-[#f3efe4] hover:border-[#ffe031]"
-              title="Refresh tasks"
+              className="riot-btn bg-[#1b1b2b] px-2.5 py-2 text-[#ffe031]"
+              title="Refresh bounties"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loadingTasks ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
 
-        {/* + New Task Inline Drawer */}
+        {/* + Post Bounty Inline Drawer */}
         {createOpen ? (
           <form
             onSubmit={handleCreateTask}
-            className="mb-4 space-y-3 rounded-lg border border-[#ffe031]/50 bg-[#0d0d10] p-4"
+            className="mb-5 space-y-3 border-[2.5px] border-black bg-[#08080c] p-4 shadow-[5px_5px_0_#ff2e88]"
           >
-            <div className="flex items-center justify-between border-b border-[#2a2a36] pb-2">
-              <MonoBadge tone="yellow">CREATE TASKOS V2 TASK</MonoBadge>
+            <div className="flex items-center justify-between border-b-2 border-black pb-2">
+              <ComicSticker tone="magenta">NEW BOUNTY SLIP</ComicSticker>
               <button
                 type="button"
                 onClick={() => setCreateOpen(false)}
-                className="text-[#9c988c] hover:text-[#f3efe4]"
+                className="text-[#a6a2b8] hover:text-[#ffe031]"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -475,34 +499,34 @@ export function TasksTab({
                 type="text"
                 value={newCode}
                 onChange={(ev) => setNewCode(ev.target.value)}
-                placeholder="Code (e.g. ECHO-042)"
-                className="rounded border border-[#2a2a36] bg-[#15151a] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                placeholder="Code (ECHO-042)"
+                className="riot-input px-2.5 py-2 font-mono text-xs"
               />
               <input
                 type="text"
                 value={newProject}
                 onChange={(ev) => setNewProject(ev.target.value)}
                 placeholder="project"
-                className="rounded border border-[#2a2a36] bg-[#15151a] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                className="riot-input px-2.5 py-2 font-mono text-xs"
               />
               <input
                 type="text"
                 value={newSeries}
                 onChange={(ev) => setNewSeries(ev.target.value)}
                 placeholder="Series (optional)"
-                className="rounded border border-[#2a2a36] bg-[#15151a] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                className="riot-input px-2.5 py-2 font-mono text-xs"
               />
               <input
                 type="text"
                 value={newMilestone}
                 onChange={(ev) => setNewMilestone(ev.target.value)}
-                placeholder="Milestone (e.g. M1)"
-                className="rounded border border-[#2a2a36] bg-[#15151a] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                placeholder="Milestone (M1)"
+                className="riot-input px-2.5 py-2 font-mono text-xs"
               />
               <select
                 value={newPriority}
                 onChange={(ev) => setNewPriority(ev.target.value)}
-                className="rounded border border-[#2a2a36] bg-[#15151a] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                className="riot-input px-2.5 py-2 font-mono text-xs font-bold"
               >
                 <option value="p0">p0</option>
                 <option value="p1">p1</option>
@@ -512,7 +536,7 @@ export function TasksTab({
               <select
                 value={newStatus}
                 onChange={(ev) => setNewStatus(ev.target.value)}
-                className="rounded border border-[#2a2a36] bg-[#15151a] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                className="riot-input px-2.5 py-2 font-mono text-xs font-bold"
               >
                 <option value="todo">todo</option>
                 <option value="backlog">backlog</option>
@@ -527,15 +551,15 @@ export function TasksTab({
                 type="text"
                 value={newTitle}
                 onChange={(ev) => setNewTitle(ev.target.value)}
-                placeholder="Task title"
-                className="rounded border border-[#2a2a36] bg-[#15151a] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none md:col-span-2"
+                placeholder="Mission title"
+                className="riot-input px-2.5 py-2 font-mono text-xs md:col-span-2"
               />
               <input
                 type="text"
                 value={newTagsInput}
                 onChange={(ev) => setNewTagsInput(ev.target.value)}
-                placeholder="Tags (comma-separated: ui,api)"
-                className="rounded border border-[#2a2a36] bg-[#15151a] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                placeholder="Tags (ui,api)"
+                className="riot-input px-2.5 py-2 font-mono text-xs"
               />
             </div>
 
@@ -544,70 +568,74 @@ export function TasksTab({
                 type="text"
                 value={newSummary}
                 onChange={(ev) => setNewSummary(ev.target.value)}
-                placeholder="Short summary / acceptance criteria (optional)"
-                className="min-w-[240px] flex-1 rounded border border-[#2a2a36] bg-[#15151a] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                placeholder="Mission brief / acceptance criteria (optional)"
+                className="riot-input min-w-[240px] flex-1 px-2.5 py-2 font-mono text-xs"
               />
               <button
                 type="submit"
                 disabled={creatingTask}
-                className="inline-flex items-center gap-1.5 rounded bg-[#ffe031] px-4 py-2 font-mono text-xs font-extrabold text-[#0d0d10] hover:opacity-90 disabled:opacity-50"
+                className="riot-btn inline-flex items-center gap-1.5 bg-[#ffe031] px-4 py-2 font-display text-xs text-[#08080c] uppercase disabled:opacity-50"
               >
                 <Plus className="h-3.5 w-3.5" />
-                {creatingTask ? 'CREATING...' : 'CREATE TASK'}
+                {creatingTask ? 'POSTING...' : 'DEPLOY BOUNTY'}
               </button>
             </div>
           </form>
         ) : null}
 
-        {/* Active filter chip strip */}
-        <div className="mb-3 flex flex-wrap items-center gap-2 font-mono text-[11px] text-[#9c988c]">
-          <MonoBadge tone="neutral">{filteredTasks.length} TASKS</MonoBadge>
-          {selectedProject ? (
-            <button
-              type="button"
-              onClick={() => onSelectProject('')}
-              className="inline-flex items-center gap-1 rounded border border-[#ffe031]/50 bg-[#ffe031]/10 px-2 py-0.5 text-[#ffe031]"
-            >
-              PROJECT: {selectedProject}
-              <X className="h-3 w-3" />
-            </button>
-          ) : null}
-          {milestoneFilter ? (
-            <button
-              type="button"
-              onClick={() => setMilestoneFilter('')}
-              className="inline-flex items-center gap-1 rounded border border-[#00b8f0]/50 bg-[#00b8f0]/10 px-2 py-0.5 text-[#00b8f0]"
-            >
-              MILESTONE: {milestoneFilter}
-              <X className="h-3 w-3" />
-            </button>
-          ) : null}
-        </div>
+        {/* Active filter chips */}
+        {selectedProject || milestoneFilter ? (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {selectedProject ? (
+              <button
+                type="button"
+                onClick={() => onSelectProject('')}
+                className="riot-btn inline-flex items-center gap-1 bg-[#ffe031] px-2.5 py-0.5 font-mono text-[11px] font-extrabold text-[#08080c]"
+              >
+                ARC: {selectedProject}
+                <X className="h-3 w-3" />
+              </button>
+            ) : null}
+            {milestoneFilter ? (
+              <button
+                type="button"
+                onClick={() => setMilestoneFilter('')}
+                className="riot-btn inline-flex items-center gap-1 bg-[#00f0ff] px-2.5 py-0.5 font-mono text-[11px] font-extrabold text-[#08080c]"
+              >
+                CHAPTER: {milestoneFilter}
+                <X className="h-3 w-3" />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
-        {/* KANBAN BOARD VIEW */}
+        {/* KANBAN BOUNTY BOARD */}
         {viewMode === 'board' ? (
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-4">
             {KANBAN_COLUMNS.map((column) => {
               const columnTasks = tasksByColumn[column.id];
               return (
                 <div
                   key={column.id}
-                  className="flex flex-col rounded-lg border border-[#2a2a36] bg-[#0d0d10]"
+                  className="flex flex-col border-[2.5px] border-black bg-[#08080c]"
+                  style={{ boxShadow: `5px 5px 0 ${column.shadowColor}` }}
                 >
                   <div
-                    className="flex items-center justify-between border-b border-[#2a2a36] px-3 py-2.5"
-                    style={{ borderTop: `3px solid ${column.accentHex}` }}
+                    className="flex items-center justify-between border-b-[2.5px] border-black px-3 py-2"
+                    style={{ backgroundColor: column.headerBg, color: column.headerText }}
                   >
-                    <span className="font-mono text-xs font-extrabold tracking-wide text-[#f3efe4]">
+                    <span className="font-display text-sm tracking-wide uppercase">
                       {column.title}
                     </span>
-                    <MonoBadge tone={column.badgeTone}>{columnTasks.length}</MonoBadge>
+                    <span className="border-2 border-black bg-[#08080c] px-2 py-0.5 font-mono text-xs font-extrabold text-[#fff6de]">
+                      {columnTasks.length}
+                    </span>
                   </div>
 
-                  <div className="max-h-[68vh] space-y-2.5 overflow-y-auto p-2.5">
+                  <div className="max-h-[68vh] space-y-3 overflow-y-auto p-3">
                     {columnTasks.length === 0 ? (
-                      <div className="rounded border border-dashed border-[#2a2a36] py-6 text-center font-mono text-[11px] text-[#9c988c]">
-                        Empty column
+                      <div className="border-2 border-dashed border-[#2f2f46] py-8 text-center font-mono text-[11px] font-bold uppercase text-[#a6a2b8]">
+                        NO BOUNTIES
                       </div>
                     ) : (
                       columnTasks.map((taskRecord) => {
@@ -616,11 +644,11 @@ export function TasksTab({
                         return (
                           <div
                             key={taskRecord.code}
-                            className="space-y-2 rounded-md border border-[#2a2a36] bg-[#15151a] p-3 transition-colors hover:border-[#3d3d4f]"
+                            className="space-y-2 border-2 border-black bg-[#13131d] p-3 shadow-[4px_4px_0_#000] transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5"
                           >
                             <div className="flex items-center justify-between gap-1.5">
                               <div className="flex flex-wrap items-center gap-1.5">
-                                <MonoBadge tone="neutral">{taskRecord.code}</MonoBadge>
+                                <MonoBadge tone="cream">{taskRecord.code}</MonoBadge>
                                 <select
                                   aria-label={`Priority for ${taskRecord.code}`}
                                   value={taskRecord.priority}
@@ -630,7 +658,7 @@ export function TasksTab({
                                       priority: ev.target.value,
                                     })
                                   }
-                                  className="cursor-pointer rounded border border-[#2a2a36] bg-[#0d0d10] px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase text-[#ffe031] focus:outline-none"
+                                  className="cursor-pointer border-2 border-black bg-[#ffe031] px-1.5 py-0.5 font-mono text-[10px] font-extrabold uppercase text-[#08080c] focus:outline-none"
                                 >
                                   <option value="p0">p0</option>
                                   <option value="p1">p1</option>
@@ -648,19 +676,19 @@ export function TasksTab({
                               <button
                                 type="button"
                                 onClick={() => void handleDeleteTask(taskRecord.code)}
-                                className="text-[#9c988c] hover:text-[#ef4444]"
-                                title="Delete task"
+                                className="border border-black bg-[#1b1b2b] p-1 text-[#a6a2b8] hover:bg-[#ff334b] hover:text-white"
+                                title="Delete bounty"
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                <Trash2 className="h-3 w-3" />
                               </button>
                             </div>
 
-                            <div className="text-xs font-bold leading-snug text-[#f3efe4]">
+                            <div className="text-xs font-bold leading-snug text-[#fff6de]">
                               {taskRecord.title}
                             </div>
 
                             {taskRecord.summary ? (
-                              <p className="line-clamp-2 text-[11px] text-[#9c988c]">
+                              <p className="line-clamp-2 text-[11px] text-[#a6a2b8]">
                                 {taskRecord.summary}
                               </p>
                             ) : null}
@@ -677,8 +705,8 @@ export function TasksTab({
                               ))}
                             </div>
 
-                            {/* One-click Move buttons */}
-                            <div className="flex flex-wrap gap-1 border-t border-[#2a2a36] pt-2">
+                            {/* One-click Strike Lane Move Triggers */}
+                            <div className="flex flex-wrap gap-1 border-t-2 border-black pt-2">
                               {KANBAN_COLUMNS.filter((targetCol) => targetCol.id !== column.id).map(
                                 (targetCol) => (
                                   <button
@@ -690,9 +718,9 @@ export function TasksTab({
                                         status: targetCol.targetStatus,
                                       })
                                     }
-                                    className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2 py-0.5 font-mono text-[10px] font-semibold text-[#9c988c] transition-colors hover:border-[#ffe031] hover:text-[#ffe031] disabled:opacity-50"
+                                    className="border-2 border-black bg-[#08080c] px-2 py-0.5 font-mono text-[10px] font-extrabold uppercase text-[#fff6de] transition-colors hover:bg-[#ffe031] hover:text-[#08080c] disabled:opacity-50"
                                   >
-                                    -&gt; {targetCol.targetStatus}
+                                    -&gt; {targetCol.title}
                                   </button>
                                 ),
                               )}
@@ -707,32 +735,32 @@ export function TasksTab({
             })}
           </div>
         ) : (
-          /* TABLE VIEW */
-          <div className="overflow-x-auto">
+          /* TABLE INTEL VIEW */
+          <div className="overflow-x-auto border-2 border-black bg-[#08080c]">
             <table className="w-full border-collapse text-left text-xs">
               <thead>
-                <tr className="border-b border-[#2a2a36] font-mono text-[10px] uppercase tracking-wider text-[#9c988c]">
+                <tr className="border-b-2 border-black bg-[#ffe031] font-mono text-[10px] font-extrabold uppercase tracking-wider text-[#08080c]">
                   <th className="px-3 py-2">Code</th>
-                  <th className="px-3 py-2">Title &amp; Summary</th>
-                  <th className="px-3 py-2">Project / Milestone</th>
+                  <th className="px-3 py-2">Mission Title &amp; Brief</th>
+                  <th className="px-3 py-2">Arc / Chapter</th>
                   <th className="px-3 py-2">Priority</th>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#2a2a36]/70">
+              <tbody className="divide-y divide-[#252538]">
                 {filteredTasks.length > 0 ? (
                   filteredTasks.map((taskRecord) => {
                     const isBusy = patchingCode === taskRecord.code;
                     return (
-                      <tr key={taskRecord.code} className="hover:bg-[#1c1c23]/60">
+                      <tr key={taskRecord.code} className="hover:bg-[#1b1b2b]">
                         <td className="px-3 py-2.5">
-                          <MonoBadge tone="neutral">{taskRecord.code}</MonoBadge>
+                          <MonoBadge tone="cream">{taskRecord.code}</MonoBadge>
                         </td>
                         <td className="px-3 py-2.5">
-                          <div className="font-semibold text-[#f3efe4]">{taskRecord.title}</div>
+                          <div className="font-bold text-[#fff6de]">{taskRecord.title}</div>
                           {taskRecord.summary ? (
-                            <div className="mt-0.5 max-w-md truncate text-[11px] text-[#9c988c]">
+                            <div className="mt-0.5 max-w-md truncate text-[11px] text-[#a6a2b8]">
                               {taskRecord.summary}
                             </div>
                           ) : null}
@@ -752,7 +780,7 @@ export function TasksTab({
                             onChange={(ev) =>
                               void handlePatchTask(taskRecord.code, { priority: ev.target.value })
                             }
-                            className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2 py-1 font-mono text-xs font-bold text-[#ffe031] focus:border-[#ffe031] focus:outline-none"
+                            className="riot-input px-2 py-1 font-mono text-xs font-extrabold text-[#ffe031]"
                           >
                             <option value="p0">p0</option>
                             <option value="p1">p1</option>
@@ -767,7 +795,7 @@ export function TasksTab({
                             onChange={(ev) =>
                               void handlePatchTask(taskRecord.code, { status: ev.target.value })
                             }
-                            className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2 py-1 font-mono text-xs font-semibold text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                            className="riot-input px-2 py-1 font-mono text-xs font-bold"
                           >
                             <option value="todo">todo</option>
                             <option value="backlog">backlog</option>
@@ -781,7 +809,7 @@ export function TasksTab({
                           <button
                             type="button"
                             onClick={() => void handleDeleteTask(taskRecord.code)}
-                            className="inline-flex items-center gap-1 rounded border border-[#ef4444]/40 bg-[#ef4444]/10 px-2 py-1 font-mono text-[10px] font-bold text-[#ef4444] hover:bg-[#ef4444]/20"
+                            className="riot-btn inline-flex items-center gap-1 bg-[#ff334b] px-2 py-1 font-mono text-[10px] font-extrabold text-white"
                           >
                             <Trash2 className="h-3 w-3" />
                             DEL
@@ -792,8 +820,11 @@ export function TasksTab({
                   })
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-3 py-8 text-center font-mono text-xs text-[#9c988c]">
-                      No tasks match your current filters.
+                    <td
+                      colSpan={6}
+                      className="px-3 py-8 text-center font-mono text-xs font-bold uppercase text-[#a6a2b8]"
+                    >
+                      No bounties match your current filters.
                     </td>
                   </tr>
                 )}

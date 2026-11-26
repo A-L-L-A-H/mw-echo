@@ -25,7 +25,7 @@ import {
   type StorageProviderRecord,
 } from '../api';
 import { computeUsagePercent, formatBytes, formatShortTime } from '../utils';
-import { MonoBadge, SectionCard, StatTile } from './UiPrimitives';
+import { MonoBadge, SectionCard, StageHeroBanner, StatTile } from './UiPrimitives';
 
 interface StoragePoolTabProps {
   poolSummary: PoolSummary | null;
@@ -48,7 +48,6 @@ export function StoragePoolTab({
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [syncingProviderId, setSyncingProviderId] = useState<string | null>(null);
 
-  // Google Drive connect form
   const [gdName, setGdName] = useState('');
   const [gdClientId, setGdClientId] = useState('');
   const [gdClientSecret, setGdClientSecret] = useState('');
@@ -57,7 +56,6 @@ export function StoragePoolTab({
   const [gdPriority, setGdPriority] = useState('10');
   const [connectingGd, setConnectingGd] = useState(false);
 
-  // S3 / R2 / Garage connect form
   const [s3Name, setS3Name] = useState('');
   const [s3Endpoint, setS3Endpoint] = useState('');
   const [s3Bucket, setS3Bucket] = useState('');
@@ -69,7 +67,6 @@ export function StoragePoolTab({
   const [s3ForcePathStyle, setS3ForcePathStyle] = useState(true);
   const [connectingS3, setConnectingS3] = useState(false);
 
-  // File upload & browser state
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProject, setUploadProject] = useState('moonwitness');
@@ -89,7 +86,7 @@ export function StoragePoolTab({
     setSavingPolicy(true);
     try {
       await updateStorageRoutingPolicy(nextPolicy);
-      onNotify('ok', `Upload routing policy updated to "${nextPolicy}".`);
+      onNotify('ok', `Cargo routing policy set to "${nextPolicy}".`);
       await onReloadStorage(objectSearch);
     } catch (caughtError) {
       const message =
@@ -120,7 +117,7 @@ export function StoragePoolTab({
   const handleDeleteProvider = async (provider: StorageProviderRecord) => {
     try {
       await deleteStorageProvider(provider.id);
-      onNotify('ok', `Removed storage provider "${provider.name}".`);
+      onNotify('ok', `Undocked tank "${provider.name}".`);
       await onReloadStorage(objectSearch);
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : 'Failed to remove provider';
@@ -149,7 +146,7 @@ export function StoragePoolTab({
       });
       setGdName('');
       setGdRefreshToken('');
-      onNotify('ok', 'Google Drive account connected to 9Drive pool.');
+      onNotify('ok', 'Google Drive 15 GB tank docked to 9Drive Vault.');
       await onReloadStorage(objectSearch);
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : 'Google Drive connect failed';
@@ -173,10 +170,7 @@ export function StoragePoolTab({
         priority: Number(gdPriority) || 10,
       });
       window.open(oauthReply.authUrl, '_blank', 'noopener,noreferrer');
-      onNotify(
-        'info',
-        `Opened Google consent tab. Authorized redirect URI: ${oauthReply.redirectUri}`,
-      );
+      onNotify('info', `Opened Google consent tab. Redirect URI: ${oauthReply.redirectUri}`);
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : 'OAuth start failed';
       onNotify('err', message);
@@ -215,7 +209,7 @@ export function StoragePoolTab({
       });
       setS3Name('');
       setS3SecretKey('');
-      onNotify('ok', 'S3 / R2 / Garage bucket connected to 9Drive pool.');
+      onNotify('ok', 'S3 / R2 / Garage tank docked to 9Drive Vault.');
       await onReloadStorage(objectSearch);
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : 'S3 bucket connect failed';
@@ -228,7 +222,7 @@ export function StoragePoolTab({
   const handleUploadObject = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedFile) {
-      onNotify('err', 'Choose a file to upload first.');
+      onNotify('err', 'Choose a cargo file to drop first.');
       return;
     }
     setUploadingFile(true);
@@ -241,12 +235,10 @@ export function StoragePoolTab({
       });
       setSelectedFile(null);
       setUploadLogicalPath('');
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      if (fileInputRef.current) fileInputRef.current.value = '';
       onNotify(
         'ok',
-        `Uploaded ${storedObj.logicalPath} -> ${storedObj.providerKind}:${storedObj.providerName}.`,
+        `Stowed ${storedObj.logicalPath} -> ${storedObj.providerKind}:${storedObj.providerName}.`,
       );
       await onReloadStorage(objectSearch);
     } catch (caughtError) {
@@ -260,7 +252,7 @@ export function StoragePoolTab({
   const handleDeleteObject = async (storedObj: PooledStorageObject) => {
     try {
       await deleteStorageObject(storedObj.id);
-      onNotify('ok', `Deleted ${storedObj.logicalPath}.`);
+      onNotify('ok', `Jettisoned ${storedObj.logicalPath}.`);
       await onReloadStorage(objectSearch);
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : 'Delete object failed';
@@ -269,98 +261,112 @@ export function StoragePoolTab({
   };
 
   return (
-    <div className="space-y-5">
-      {/* Pool Quota Metrics */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="space-y-6">
+      <StageHeroBanner
+        sceneCode="SCENE 08"
+        sticker="CARGO VAULT"
+        title="9DRIVE POOL // FUEL TANKS & DROPZONE"
+        subtitle="STACK FREE 15 GB GOOGLE DRIVE ACCOUNTS + S3/R2/GARAGE BUCKETS — ZERO LOCAL DISK WASTE"
+        tone="yellow"
+        actions={
+          <button
+            type="button"
+            onClick={() => void onReloadStorage(objectSearch)}
+            className="riot-btn inline-flex items-center gap-1.5 bg-[#ffe031] px-4 py-2 font-mono text-xs font-extrabold text-[#08080c]"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            SYNC TANKS
+          </button>
+        }
+      />
+
+      {/* Fuel Tank Telemetry Stamps */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile
-          label="Connected Providers"
+          label="DOCKED TANKS"
           value={providers.length}
           sublabel={`Policy: ${poolSummary?.routingPolicy ?? policyChoice}`}
           icon={<Server className="h-4 w-4" />}
           tone="cyan"
         />
         <StatTile
-          label="Combined Pool Quota"
+          label="TOTAL CAPACITY"
           value={formatBytes(totalQuota)}
-          sublabel="Google Drive (15 GB/acct) + S3/R2"
+          sublabel="GDrive 15GB/acct + S3/R2"
           icon={<Cloud className="h-4 w-4" />}
           tone="yellow"
         />
         <StatTile
-          label="Combined Used"
+          label="CARGO LOADED"
           value={formatBytes(totalUsed)}
-          sublabel={`${combinedPct}% pool utilization`}
+          sublabel={`${combinedPct}% tank fill`}
           icon={<Database className="h-4 w-4" />}
           tone="magenta"
         />
         <StatTile
-          label="Combined Free Space"
+          label="FREE RESERVES"
           value={formatBytes(totalFree)}
-          sublabel="Zero local Windows disk usage"
+          sublabel="Zero local Windows disk"
           icon={<HardDrive className="h-4 w-4" />}
           tone="ok"
         />
       </div>
 
-      {/* Combined Quota Meter + Policy + Connected Providers */}
+      {/* Combined Fuel Gauge + Tank Roster */}
       <SectionCard
-        title="9Drive Multi-Account Storage Pool"
-        subtitle="Uploads stream straight to remote cloud accounts according to the active routing policy."
+        title="9DRIVE FUEL TANK ARRAY"
+        subtitle="Uploads stream straight into remote cloud accounts using your active routing policy."
         icon={<Cloud className="h-4 w-4" />}
+        sticker="ZERO DISK"
+        stickerTone="ok"
+        accent="yellow"
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-[11px] uppercase text-[#9c988c]">Routing Policy:</span>
+            <span className="font-mono text-[11px] font-extrabold uppercase text-[#ffe031]">
+              ROUTING:
+            </span>
             <select
               value={poolSummary?.routingPolicy ?? policyChoice}
               disabled={savingPolicy}
               onChange={(ev) => void handleSavePolicy(ev.target.value as RoutingPolicy)}
-              className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-1.5 font-mono text-xs text-[#ffe031] focus:border-[#ffe031] focus:outline-none"
+              className="riot-input px-2.5 py-1.5 font-mono text-xs font-extrabold text-[#ffe031]"
             >
-              <option value="most_free">most_free (Largest Free Space)</option>
-              <option value="round_robin">round_robin (Balanced Spread)</option>
-              <option value="priority">priority (Strict Priority Order)</option>
+              <option value="most_free">most_free (Largest Reserve)</option>
+              <option value="round_robin">round_robin (Balanced)</option>
+              <option value="priority">priority (Strict Order)</option>
             </select>
-            <button
-              type="button"
-              onClick={() => void onReloadStorage(objectSearch)}
-              className="inline-flex items-center gap-1 rounded border border-[#2a2a36] bg-[#1c1c23] px-2.5 py-1.5 font-mono text-[11px] text-[#f3efe4] hover:border-[#ffe031]"
-            >
-              <RefreshCw className={`h-3 w-3 ${isLoading ? 'animate-spin' : ''}`} />
-              REFRESH
-            </button>
           </div>
         }
       >
-        {/* Combined Progress Meter */}
-        <div className="mb-4 rounded-md border border-[#2a2a36] bg-[#0d0d10] p-3">
-          <div className="mb-1.5 flex items-center justify-between font-mono text-xs">
-            <span className="text-[#9c988c]">COMBINED POOL CAPACITY</span>
-            <span className="font-bold text-[#f3efe4]">
+        <div className="mb-4 border-2 border-black bg-[#08080c] p-3.5 shadow-[4px_4px_0_#000]">
+          <div className="mb-1.5 flex items-center justify-between font-mono text-xs font-extrabold">
+            <span className="text-[#00f0ff]">COMBINED FUEL LEVEL</span>
+            <span className="text-[#ffe031]">
               {formatBytes(totalUsed)} / {formatBytes(totalQuota)} ({combinedPct}%)
             </span>
           </div>
-          <div className="h-2.5 w-full overflow-hidden rounded-full bg-[#1c1c23]">
+          <div className="h-5 w-full overflow-hidden border-2 border-black bg-[#1b1b2b]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-[#00b8f0] via-[#ffe031] to-[#ff2e88] transition-all"
+              className="riot-xp-stripe h-full border-r-2 border-black bg-gradient-to-r from-[#00f0ff] via-[#ffe031] to-[#ff2e88] transition-all"
               style={{ width: `${combinedPct}%` }}
             />
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto border-2 border-black bg-[#08080c]">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-[#2a2a36] font-mono text-[10px] uppercase tracking-wider text-[#9c988c]">
-                <th className="px-3 py-2">Account</th>
+              <tr className="border-b-2 border-black bg-[#ffe031] font-mono text-[10px] font-extrabold uppercase text-[#08080c]">
+                <th className="px-3 py-2">Tank Account</th>
                 <th className="px-3 py-2">Kind</th>
-                <th className="px-3 py-2">Target / Ref</th>
-                <th className="px-3 py-2">Quota Meter</th>
+                <th className="px-3 py-2">Target</th>
+                <th className="px-3 py-2">Fuel Gauge</th>
                 <th className="px-3 py-2">Free</th>
-                <th className="px-3 py-2">Priority</th>
+                <th className="px-3 py-2">Pri</th>
                 <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#2a2a36]/70">
+            <tbody className="divide-y divide-[#252538]">
               {providers.length > 0 ? (
                 providers.map((provider) => {
                   const pct = computeUsagePercent(provider.usedBytes, provider.quotaBytes);
@@ -371,44 +377,48 @@ export function StoragePoolTab({
                         ? 'cyan'
                         : 'neutral';
                   return (
-                    <tr key={provider.id} className="hover:bg-[#1c1c23]/60">
+                    <tr key={provider.id} className="hover:bg-[#1b1b2b]">
                       <td className="px-3 py-2.5">
-                        <div className="font-mono font-bold text-[#f3efe4]">{provider.name}</div>
-                        <div className="font-mono text-[10px] text-[#9c988c]">
-                          Synced: {formatShortTime(provider.lastSyncAt)}
+                        <div className="font-display text-xs text-[#fff6de] uppercase">
+                          {provider.name}
+                        </div>
+                        <div className="font-mono text-[10px] text-[#a6a2b8]">
+                          Synced {formatShortTime(provider.lastSyncAt)}
                         </div>
                       </td>
                       <td className="px-3 py-2.5">
                         <MonoBadge tone={kindTone}>{provider.kind}</MonoBadge>
                       </td>
-                      <td className="max-w-[200px] truncate px-3 py-2.5 font-mono text-[11px] text-[#9c988c]">
+                      <td className="max-w-[200px] truncate px-3 py-2.5 font-mono text-[11px] text-[#a6a2b8]">
                         {provider.accountRef || '—'}
                       </td>
                       <td className="min-w-[170px] px-3 py-2.5">
-                        <div className="mb-1 flex justify-between font-mono text-[10px] text-[#9c988c]">
+                        <div className="mb-1 flex justify-between font-mono text-[10px] font-bold text-[#a6a2b8]">
                           <span>{formatBytes(provider.usedBytes)}</span>
                           <span>{formatBytes(provider.quotaBytes)}</span>
                         </div>
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#1c1c23]">
+                        <div className="h-2.5 w-full overflow-hidden border border-black bg-[#1b1b2b]">
                           <div
-                            className={`h-full rounded-full ${
-                              pct > 85 ? 'bg-[#ef4444]' : pct > 65 ? 'bg-[#ffe031]' : 'bg-[#22c55e]'
+                            className={`riot-xp-stripe h-full ${
+                              pct > 85 ? 'bg-[#ff334b]' : pct > 65 ? 'bg-[#ffe031]' : 'bg-[#a3ff12]'
                             }`}
                             style={{ width: `${pct}%` }}
                           />
                         </div>
                       </td>
-                      <td className="px-3 py-2.5 font-mono font-bold text-[#22c55e]">
+                      <td className="px-3 py-2.5 font-mono font-extrabold text-[#a3ff12]">
                         {formatBytes(provider.freeBytes)}
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-[#9c988c]">{provider.priority}</td>
+                      <td className="px-3 py-2.5 font-mono font-bold text-[#fff6de]">
+                        {provider.priority}
+                      </td>
                       <td className="px-3 py-2.5">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
                             disabled={syncingProviderId === provider.id}
                             onClick={() => void handleSyncQuota(provider)}
-                            className="inline-flex items-center gap-1 rounded border border-[#2a2a36] bg-[#1c1c23] px-2 py-1 font-mono text-[10px] font-semibold text-[#00b8f0] hover:border-[#00b8f0] disabled:opacity-50"
+                            className="riot-btn inline-flex items-center gap-1 bg-[#00f0ff] px-2 py-1 font-mono text-[10px] font-extrabold text-[#08080c] disabled:opacity-50"
                           >
                             <RefreshCw
                               className={`h-3 w-3 ${syncingProviderId === provider.id ? 'animate-spin' : ''}`}
@@ -418,7 +428,7 @@ export function StoragePoolTab({
                           <button
                             type="button"
                             onClick={() => void handleDeleteProvider(provider)}
-                            className="inline-flex items-center gap-1 rounded border border-[#ef4444]/40 bg-[#ef4444]/10 px-2 py-1 font-mono text-[10px] font-semibold text-[#ef4444] hover:bg-[#ef4444]/20"
+                            className="riot-btn inline-flex items-center gap-1 bg-[#ff334b] px-2 py-1 font-mono text-[10px] font-extrabold text-white"
                           >
                             <Trash2 className="h-3 w-3" />
                             DEL
@@ -430,9 +440,11 @@ export function StoragePoolTab({
                 })
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center font-mono text-xs text-[#9c988c]">
-                    No cloud accounts connected yet. Uploads automatically fall back to built-in
-                    local disk until you connect Google Drive or S3/R2/Garage below.
+                  <td
+                    colSpan={7}
+                    className="px-3 py-6 text-center font-mono text-xs font-bold uppercase text-[#a6a2b8]"
+                  >
+                    NO CLOUD TANKS DOCKED YET. DOCK GOOGLE DRIVE OR S3/R2/GARAGE BELOW!
                   </td>
                 </tr>
               )}
@@ -441,12 +453,15 @@ export function StoragePoolTab({
         </div>
       </SectionCard>
 
-      {/* Connect Google Drive + Connect S3/R2/Garage */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      {/* Docking Bays: Google Drive & S3/R2/Garage */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <SectionCard
-          title="Connect Google Drive (15 GB Free / Account)"
-          subtitle="Use 1-click OAuth browser consent or paste an existing OAuth refresh token."
+          title="DOCK GOOGLE DRIVE (15 GB FREE)"
+          subtitle="1-click OAuth browser consent or paste refresh token."
           icon={<Cloud className="h-4 w-4" />}
+          sticker="15 GB"
+          stickerTone="yellow"
+          accent="yellow"
         >
           <form onSubmit={handleAddGDriveToken} className="space-y-2.5">
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
@@ -454,15 +469,15 @@ export function StoragePoolTab({
                 type="text"
                 value={gdName}
                 onChange={(ev) => setGdName(ev.target.value)}
-                placeholder="Account label (gdrive-1)"
-                className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none sm:col-span-2"
+                placeholder="Tank label (gdrive-1)"
+                className="riot-input px-2.5 py-2 font-mono text-xs sm:col-span-2"
               />
               <input
                 type="number"
                 value={gdPriority}
                 onChange={(ev) => setGdPriority(ev.target.value)}
                 placeholder="Priority"
-                className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                className="riot-input px-2.5 py-2 font-mono text-xs"
               />
             </div>
             <input
@@ -470,14 +485,14 @@ export function StoragePoolTab({
               value={gdClientId}
               onChange={(ev) => setGdClientId(ev.target.value)}
               placeholder="Google OAuth Client ID"
-              className="w-full rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+              className="riot-input w-full px-2.5 py-2 font-mono text-xs"
             />
             <input
               type="password"
               value={gdClientSecret}
               onChange={(ev) => setGdClientSecret(ev.target.value)}
               placeholder="Google OAuth Client Secret"
-              className="w-full rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+              className="riot-input w-full px-2.5 py-2 font-mono text-xs"
             />
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
               <input
@@ -485,14 +500,14 @@ export function StoragePoolTab({
                 value={gdRefreshToken}
                 onChange={(ev) => setGdRefreshToken(ev.target.value)}
                 placeholder="Refresh Token (optional for OAuth)"
-                className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none sm:col-span-2"
+                className="riot-input px-2.5 py-2 font-mono text-xs sm:col-span-2"
               />
               <input
                 type="text"
                 value={gdRootFolder}
                 onChange={(ev) => setGdRootFolder(ev.target.value)}
                 placeholder="Root folder"
-                className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                className="riot-input px-2.5 py-2 font-mono text-xs"
               />
             </div>
             <div className="flex flex-wrap gap-2 pt-1">
@@ -500,7 +515,7 @@ export function StoragePoolTab({
                 type="button"
                 disabled={connectingGd}
                 onClick={() => void handleStartGDriveOAuth()}
-                className="inline-flex items-center gap-1.5 rounded bg-[#ffe031] px-3.5 py-2 font-mono text-xs font-extrabold text-[#0d0d10] hover:opacity-90 disabled:opacity-50"
+                className="riot-btn inline-flex items-center gap-1.5 bg-[#ffe031] px-4 py-2 font-display text-xs text-[#08080c] uppercase disabled:opacity-50"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
                 OAUTH CONNECT
@@ -508,7 +523,7 @@ export function StoragePoolTab({
               <button
                 type="submit"
                 disabled={connectingGd}
-                className="inline-flex items-center gap-1.5 rounded border border-[#2a2a36] bg-[#1c1c23] px-3.5 py-2 font-mono text-xs font-bold text-[#f3efe4] hover:border-[#ffe031] hover:text-[#ffe031] disabled:opacity-50"
+                className="riot-btn inline-flex items-center gap-1.5 bg-[#1b1b2b] px-4 py-2 font-mono text-xs font-extrabold text-[#fff6de] uppercase disabled:opacity-50"
               >
                 SAVE REFRESH TOKEN
               </button>
@@ -517,9 +532,12 @@ export function StoragePoolTab({
         </SectionCard>
 
         <SectionCard
-          title="Connect S3 / Cloudflare R2 / Garage"
-          subtitle="AWS SigV4 compatible object storage bucket (zero local disk footprint)."
+          title="DOCK S3 / CLOUDFLARE R2 / GARAGE"
+          subtitle="AWS SigV4 compatible object bucket."
           icon={<Database className="h-4 w-4" />}
+          sticker="S3 / R2"
+          stickerTone="cyan"
+          accent="cyan"
         >
           <form onSubmit={handleAddS3Bucket} className="space-y-2.5">
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -528,14 +546,14 @@ export function StoragePoolTab({
                 value={s3Name}
                 onChange={(ev) => setS3Name(ev.target.value)}
                 placeholder="Bucket label (r2-primary)"
-                className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                className="riot-input px-2.5 py-2 font-mono text-xs"
               />
               <input
                 type="text"
                 value={s3Endpoint}
                 onChange={(ev) => setS3Endpoint(ev.target.value)}
                 placeholder="https://s3.moonwitness.biz.id"
-                className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                className="riot-input px-2.5 py-2 font-mono text-xs"
               />
             </div>
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
@@ -544,14 +562,14 @@ export function StoragePoolTab({
                 value={s3Bucket}
                 onChange={(ev) => setS3Bucket(ev.target.value)}
                 placeholder="Bucket name"
-                className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none sm:col-span-2"
+                className="riot-input px-2.5 py-2 font-mono text-xs sm:col-span-2"
               />
               <input
                 type="text"
                 value={s3Region}
                 onChange={(ev) => setS3Region(ev.target.value)}
-                placeholder="Region (auto)"
-                className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                placeholder="Region"
+                className="riot-input px-2.5 py-2 font-mono text-xs"
               />
             </div>
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -560,14 +578,14 @@ export function StoragePoolTab({
                 value={s3AccessKey}
                 onChange={(ev) => setS3AccessKey(ev.target.value)}
                 placeholder="Access Key ID"
-                className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                className="riot-input px-2.5 py-2 font-mono text-xs"
               />
               <input
                 type="password"
                 value={s3SecretKey}
                 onChange={(ev) => setS3SecretKey(ev.target.value)}
                 placeholder="Secret Access Key"
-                className="rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                className="riot-input px-2.5 py-2 font-mono text-xs"
               />
             </div>
             <div className="flex flex-wrap items-center gap-2.5 pt-1">
@@ -576,52 +594,54 @@ export function StoragePoolTab({
                 value={s3QuotaGb}
                 onChange={(ev) => setS3QuotaGb(ev.target.value)}
                 placeholder="Quota GB"
-                className="w-24 rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                className="riot-input w-24 px-2.5 py-2 font-mono text-xs"
               />
               <input
                 type="number"
                 value={s3Priority}
                 onChange={(ev) => setS3Priority(ev.target.value)}
-                placeholder="Priority"
-                className="w-24 rounded border border-[#2a2a36] bg-[#0d0d10] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                placeholder="Pri"
+                className="riot-input w-20 px-2.5 py-2 font-mono text-xs"
               />
-              <label className="inline-flex cursor-pointer items-center gap-1.5 font-mono text-[11px] text-[#9c988c]">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 font-mono text-[11px] font-bold text-[#fff6de]">
                 <input
                   type="checkbox"
                   checked={s3ForcePathStyle}
                   onChange={(ev) => setS3ForcePathStyle(ev.target.checked)}
-                  className="accent-[#ffe031]"
+                  className="h-4 w-4 accent-[#00f0ff]"
                 />
-                Path-Style
+                PATH-STYLE
               </label>
               <button
                 type="submit"
                 disabled={connectingS3}
-                className="ml-auto inline-flex items-center gap-1.5 rounded bg-[#00b8f0] px-3.5 py-2 font-mono text-xs font-extrabold text-[#0d0d10] hover:opacity-90 disabled:opacity-50"
+                className="riot-btn ml-auto inline-flex items-center gap-1.5 bg-[#00f0ff] px-4 py-2 font-display text-xs text-[#08080c] uppercase disabled:opacity-50"
               >
-                ADD S3 BUCKET
+                DOCK BUCKET
               </button>
             </div>
           </form>
         </SectionCard>
       </div>
 
-      {/* Zero-Local-Disk File Upload & Object Browser */}
+      {/* Cloud Cargo Dropzone & Manifest */}
       <SectionCard
-        title="Zero-Local-Disk Storage Browser"
-        subtitle="Upload binary assets directly into the pooled cloud accounts and stream downloads by object ID."
+        title="CLOUD CARGO DROPZONE & MANIFEST"
+        subtitle="Upload binary assets directly into pooled cloud tanks and stream downloads on demand."
         icon={<HardDrive className="h-4 w-4" />}
+        sticker="DROPZONE"
+        stickerTone="magenta"
       >
         <form
           onSubmit={handleUploadObject}
-          className="mb-4 grid grid-cols-1 gap-2.5 rounded-lg border border-[#2a2a36] bg-[#0d0d10] p-3.5 md:grid-cols-12"
+          className="mb-4 grid grid-cols-1 gap-2.5 border-2 border-black bg-[#08080c] p-3.5 shadow-[4px_4px_0_#000] md:grid-cols-12"
         >
           <div className="md:col-span-4">
             <input
               ref={fileInputRef}
               type="file"
               onChange={(ev) => setSelectedFile(ev.target.files?.[0] ?? null)}
-              className="w-full cursor-pointer rounded border border-[#2a2a36] bg-[#15151a] px-2.5 py-1.5 font-mono text-xs text-[#f3efe4] file:mr-2.5 file:rounded file:border-0 file:bg-[#ffe031] file:px-2 file:py-0.5 file:font-mono file:text-[11px] file:font-bold file:text-[#0d0d10]"
+              className="riot-input w-full cursor-pointer px-2 py-1.5 font-mono text-xs file:mr-2.5 file:border-2 file:border-black file:bg-[#ffe031] file:px-2 file:py-0.5 file:font-mono file:text-[11px] file:font-extrabold file:text-[#08080c]"
             />
           </div>
           <div className="md:col-span-2">
@@ -630,7 +650,7 @@ export function StoragePoolTab({
               value={uploadProject}
               onChange={(ev) => setUploadProject(ev.target.value)}
               placeholder="project"
-              className="w-full rounded border border-[#2a2a36] bg-[#15151a] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+              className="riot-input w-full px-2.5 py-2 font-mono text-xs"
             />
           </div>
           <div className="md:col-span-3">
@@ -638,15 +658,15 @@ export function StoragePoolTab({
               type="text"
               value={uploadLogicalPath}
               onChange={(ev) => setUploadLogicalPath(ev.target.value)}
-              placeholder="Optional path (assets/hero.png)"
-              className="w-full rounded border border-[#2a2a36] bg-[#15151a] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+              placeholder="Path (assets/hero.png)"
+              className="riot-input w-full px-2.5 py-2 font-mono text-xs"
             />
           </div>
           <div className="md:col-span-2">
             <select
               value={uploadProviderId}
               onChange={(ev) => setUploadProviderId(ev.target.value)}
-              className="w-full rounded border border-[#2a2a36] bg-[#15151a] px-2.5 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+              className="riot-input w-full px-2.5 py-2 font-mono text-xs font-bold"
             >
               <option value="">Auto ({poolSummary?.routingPolicy ?? policyChoice})</option>
               {providers.map((provider) => (
@@ -660,52 +680,50 @@ export function StoragePoolTab({
             <button
               type="submit"
               disabled={uploadingFile}
-              className="inline-flex w-full items-center justify-center gap-1 rounded bg-[#ffe031] px-3 py-2 font-mono text-xs font-extrabold text-[#0d0d10] hover:opacity-90 disabled:opacity-50"
+              className="riot-btn inline-flex w-full items-center justify-center gap-1 bg-[#a3ff12] px-3 py-2 font-display text-xs text-[#08080c] uppercase disabled:opacity-50"
             >
               <Upload className="h-3.5 w-3.5" />
-              {uploadingFile ? '...' : 'PUT'}
+              {uploadingFile ? '...' : 'DROP'}
             </button>
           </div>
         </form>
 
         <div className="mb-3 flex items-center gap-2">
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-[#9c988c]" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#ffe031]" />
             <input
               type="search"
               value={objectSearch}
               onChange={(ev) => setObjectSearch(ev.target.value)}
               onKeyDown={(ev) => {
-                if (ev.key === 'Enter') {
-                  void onReloadStorage(objectSearch);
-                }
+                if (ev.key === 'Enter') void onReloadStorage(objectSearch);
               }}
-              placeholder="Filter stored objects by path, filename, or MIME..."
-              className="w-full rounded border border-[#2a2a36] bg-[#0d0d10] py-2 pr-3 pl-9 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+              placeholder="Search cargo manifest by path, filename, or MIME..."
+              className="riot-input w-full py-2 pr-3 pl-9 font-mono text-xs"
             />
           </div>
           <button
             type="button"
             onClick={() => void onReloadStorage(objectSearch)}
-            className="rounded border border-[#2a2a36] bg-[#1c1c23] px-3.5 py-2 font-mono text-xs font-semibold text-[#f3efe4] hover:border-[#ffe031]"
+            className="riot-btn bg-[#1b1b2b] px-4 py-2 font-mono text-xs font-extrabold text-[#ffe031]"
           >
             SEARCH
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto border-2 border-black bg-[#08080c]">
           <table className="w-full border-collapse text-left text-xs">
             <thead>
-              <tr className="border-b border-[#2a2a36] font-mono text-[10px] uppercase tracking-wider text-[#9c988c]">
+              <tr className="border-b-2 border-black bg-[#ff2e88] font-mono text-[10px] font-extrabold uppercase text-white">
                 <th className="px-3 py-2">Logical Path</th>
-                <th className="px-3 py-2">Provider</th>
+                <th className="px-3 py-2">Tank</th>
                 <th className="px-3 py-2">MIME</th>
                 <th className="px-3 py-2">Size</th>
                 <th className="px-3 py-2">SHA-256</th>
                 <th className="px-3 py-2 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#2a2a36]/70">
+            <tbody className="divide-y divide-[#252538]">
               {objects.length > 0 ? (
                 objects.map((storedObj) => {
                   const providerTone =
@@ -715,10 +733,10 @@ export function StoragePoolTab({
                         ? 'cyan'
                         : 'neutral';
                   return (
-                    <tr key={storedObj.id} className="hover:bg-[#1c1c23]/60">
+                    <tr key={storedObj.id} className="hover:bg-[#1b1b2b]">
                       <td className="px-3 py-2.5">
-                        <span className="font-mono text-[#9c988c]">{storedObj.project}/</span>
-                        <span className="font-mono font-bold text-[#f3efe4]">
+                        <span className="font-mono text-[#a6a2b8]">{storedObj.project}/</span>
+                        <span className="font-mono font-extrabold text-[#fff6de]">
                           {storedObj.logicalPath}
                         </span>
                       </td>
@@ -727,13 +745,13 @@ export function StoragePoolTab({
                           {storedObj.providerKind}:{storedObj.providerName}
                         </MonoBadge>
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-[11px] text-[#9c988c]">
+                      <td className="px-3 py-2.5 font-mono text-[11px] text-[#a6a2b8]">
                         {storedObj.mimeType}
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-[#f3efe4]">
+                      <td className="px-3 py-2.5 font-mono font-bold text-[#ffe031]">
                         {formatBytes(storedObj.sizeBytes)}
                       </td>
-                      <td className="px-3 py-2.5 font-mono text-[11px] text-[#9c988c]">
+                      <td className="px-3 py-2.5 font-mono text-[11px] text-[#a6a2b8]">
                         {storedObj.sha256.slice(0, 12)}
                       </td>
                       <td className="px-3 py-2.5">
@@ -742,7 +760,7 @@ export function StoragePoolTab({
                             href={`/api/storage/${encodeURIComponent(storedObj.id)}/download`}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center gap-1 rounded border border-[#2a2a36] bg-[#1c1c23] px-2 py-1 font-mono text-[10px] font-semibold text-[#00b8f0] hover:border-[#00b8f0]"
+                            className="riot-btn inline-flex items-center gap-1 bg-[#00f0ff] px-2 py-1 font-mono text-[10px] font-extrabold text-[#08080c]"
                           >
                             <Download className="h-3 w-3" />
                             GET
@@ -750,7 +768,7 @@ export function StoragePoolTab({
                           <button
                             type="button"
                             onClick={() => void handleDeleteObject(storedObj)}
-                            className="inline-flex items-center gap-1 rounded border border-[#ef4444]/40 bg-[#ef4444]/10 px-2 py-1 font-mono text-[10px] font-semibold text-[#ef4444] hover:bg-[#ef4444]/20"
+                            className="riot-btn inline-flex items-center gap-1 bg-[#ff334b] px-2 py-1 font-mono text-[10px] font-extrabold text-white"
                           >
                             <Trash2 className="h-3 w-3" />
                             DEL
@@ -762,8 +780,11 @@ export function StoragePoolTab({
                 })
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center font-mono text-xs text-[#9c988c]">
-                    No stored objects found.
+                  <td
+                    colSpan={6}
+                    className="px-3 py-6 text-center font-mono text-xs font-bold uppercase text-[#a6a2b8]"
+                  >
+                    CARGO MANIFEST EMPTY.
                   </td>
                 </tr>
               )}

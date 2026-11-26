@@ -298,6 +298,518 @@ export interface GitRepoRadarResponse {
   scannedAt: string;
 }
 
+// --- WhatsApp (GOWA / whatsmeow) ---
+
+export interface WhatsAppStats {
+  devicesCount: number;
+  connectedCount: number;
+  chatsCount: number;
+  messagesCount: number;
+  engine: string;
+}
+
+export interface WhatsAppDevice {
+  deviceId: string;
+  label: string;
+  jid: string;
+  status: string;
+  isConnected: boolean;
+  isLoggedIn: boolean;
+  qr?: string;
+  qrLink?: string;
+  qrDataUrl?: string;
+  pairingCode?: string;
+  webhookUrl: string;
+  hasWebhookSecret: boolean;
+  aiAutoReply: boolean;
+  aiAgentId: string;
+  archiveToPool: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WhatsAppDevicesResponse {
+  devices: WhatsAppDevice[];
+  count: number;
+}
+
+export interface WhatsAppDeviceCreateInput {
+  deviceId: string;
+  label: string;
+}
+
+export interface WhatsAppDeviceConfigPatch {
+  label?: string;
+  webhookUrl?: string;
+  webhookSecret?: string;
+  aiAutoReply?: boolean;
+  aiAgentId?: string;
+  archiveToPool?: boolean;
+}
+
+export interface WhatsAppPairResponse {
+  pairCode?: string;
+  pairingCode?: string;
+  deviceId: string;
+}
+
+export interface WhatsAppChat {
+  deviceId: string;
+  jid: string;
+  name: string;
+  archived: boolean;
+  unreadCount: number;
+  lastMessage: string;
+  lastMessageTime: string;
+}
+
+export interface WhatsAppChatsResponse {
+  chats: WhatsAppChat[];
+  count: number;
+}
+
+export interface WhatsAppMessage {
+  id: string;
+  deviceId: string;
+  chatJid: string;
+  senderJid: string;
+  fromMe: boolean;
+  msgType: string;
+  body: string;
+  mediaObjectId?: string;
+  status: string;
+  timestamp: string;
+}
+
+export interface WhatsAppMessagesResponse {
+  messages: WhatsAppMessage[];
+  count: number;
+}
+
+export interface WhatsAppSendInput {
+  deviceId: string;
+  phone: string;
+  message: string;
+}
+
+export interface WhatsAppSendResponse {
+  messageId?: string;
+  id?: string;
+}
+
+// --- Built-In Coding Agent (10 CODER) ---
+
+export type CodingAgentMode = 'act' | 'plan';
+
+export interface CodingSession {
+  id: string;
+  title: string;
+  workDir: string;
+  project: string;
+  agentProfile: string;
+  model: string;
+  mode: CodingAgentMode | string;
+  status: string;
+  totalTokensIn: number;
+  totalTokensOut: number;
+  rtkTokensSaved: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CodingMessage {
+  id: string;
+  sessionId: string;
+  seq: number;
+  role: 'system' | 'user' | 'assistant' | 'tool' | string;
+  content: string;
+  toolCalls?: Array<{
+    id: string;
+    type?: string;
+    function?: { name: string; arguments: string };
+  }>;
+  toolCallsJson?: string;
+  toolCallId?: string;
+  toolName?: string;
+  metaJson?: string;
+  createdAt: string;
+}
+
+export interface CodingSessionsListResponse {
+  sessions: CodingSession[];
+  count: number;
+}
+
+export interface CodingSessionDetailResponse {
+  session: CodingSession;
+  messages: CodingMessage[];
+}
+
+export interface CodingSessionCreateInput {
+  title?: string;
+  workDir: string;
+  project?: string;
+  agentProfile?: string;
+  model?: string;
+  mode?: CodingAgentMode;
+}
+
+export interface CodingSessionPatchInput {
+  title?: string;
+  workDir?: string;
+  agentProfile?: string;
+  model?: string;
+  mode?: CodingAgentMode;
+}
+
+export interface CodingCompactResponse {
+  compacted: boolean;
+  summary: string;
+  keptMessages: number;
+}
+
+export interface CodingStreamEvent {
+  type:
+    | 'turn_start'
+    | 'step'
+    | 'assistant_message'
+    | 'tool_call'
+    | 'tool_result'
+    | 'turn_end'
+    | 'error'
+    | 'aborted'
+    | string;
+  sessionId?: string;
+  step?: number;
+  role?: string;
+  content?: string;
+  reply?: string;
+  message?: CodingMessage;
+  toolCall?: {
+    id?: string;
+    type?: string;
+    function?: { name?: string; arguments?: string };
+  };
+  toolName?: string;
+  toolCallId?: string;
+  arguments?: string;
+  output?: string;
+  toolOutput?: string;
+  error?: string;
+  tokensIn?: number;
+  tokensOut?: number;
+  rtkTokensSaved?: number;
+  model?: string;
+  provider?: string;
+  timestamp?: string;
+}
+
+// --- Gamification (11 ARENA) ---
+
+export interface GameBossBattle {
+  id: string;
+  project: string;
+  milestone: string;
+  totalTasks: number;
+  doneTasks: number;
+  maxHp: number;
+  currentHp: number;
+  remainingPct: number;
+  defeated: boolean;
+  threatLabel: string;
+}
+
+export interface GameDailyQuest {
+  id: string;
+  title: string;
+  description: string;
+  rewardXp: number;
+  progress: number;
+  target: number;
+  completed: boolean;
+  claimed: boolean;
+}
+
+export interface GameBadge {
+  id: string;
+  title: string;
+  description: string;
+  stampColor: string;
+  unlocked: boolean;
+  unlockedAt?: string;
+}
+
+export interface GameXpEvent {
+  id: string;
+  eventType: string;
+  label: string;
+  refId: string;
+  baseXp: number;
+  multiplier: number;
+  awardedXp: number;
+  createdAt: string;
+}
+
+export interface GameProfile {
+  level: number;
+  rankTitle: string;
+  totalXp: number;
+  levelFloorXp: number;
+  nextLevelXp: number;
+  levelPct: number;
+  streakDays: number;
+  comboCount: number;
+  comboMult: number;
+  lastActionAt?: string;
+  bossBattles: GameBossBattle[];
+  dailyQuests: GameDailyQuest[];
+  badges: GameBadge[];
+  recentEvents: GameXpEvent[];
+}
+
+export interface GameQuestClaimResponse {
+  awarded: number;
+  profile: GameProfile;
+}
+
+// --- AI Sidekick ("SHADOW SIDEKICK") ---
+
+export interface SidekickPersona {
+  id: string;
+  name: string;
+  role: string;
+  accent: string;
+  agentProfile: string;
+}
+
+export interface SidekickPersonasResponse {
+  personas: SidekickPersona[];
+  count: number;
+}
+
+export interface SidekickMessage {
+  id: string;
+  persona: string;
+  role: 'user' | 'assistant' | string;
+  content: string;
+  toolSummary?: string;
+  model?: string;
+  createdAt: string;
+}
+
+export interface SidekickHistoryResponse {
+  messages: SidekickMessage[];
+  count: number;
+}
+
+export interface SidekickChatInput {
+  persona: string;
+  prompt: string;
+  model?: string;
+}
+
+// --- R!OTS World Radar Network (12 WORLD) ---
+
+export interface RadarDomain {
+  id: string;
+  slug: string;
+  name: string;
+  summary: string;
+  subdomains: string[];
+}
+
+export interface RadarDomainsResponse {
+  taxonomyVersion: string;
+  domains: RadarDomain[];
+  count: number;
+}
+
+export interface RadarLens {
+  id: string;
+  name: string;
+  question: string;
+}
+
+export interface RadarLensesResponse {
+  lenses: RadarLens[];
+  count: number;
+}
+
+export interface RadarPack {
+  id: string;
+  version: string;
+  name: string;
+  description: string;
+  status: string;
+  domains: string[];
+  niches: string[];
+  lenses: string[];
+  requiredConnectors: string[];
+}
+
+export interface RadarPacksResponse {
+  packs: RadarPack[];
+  count: number;
+}
+
+export interface RadarInstance {
+  id: string;
+  packId: string;
+  packVersion: string;
+  name: string;
+  mode: string;
+  status: string;
+  targetCount: number;
+  lastRunStatus: string;
+  lastRunAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RadarInstancesResponse {
+  instances: RadarInstance[];
+  count: number;
+}
+
+export interface WatchTargetCreateInput {
+  targetType: string;
+  canonicalName: string;
+  connectorId: string;
+  sourceUri: string;
+  independenceGroup?: string;
+}
+
+export interface WatchTargetRecord {
+  id: string;
+  instanceId: string;
+  targetType: string;
+  canonicalName: string;
+  connectorId: string;
+  sourceUri: string;
+  independenceGroup?: string;
+  createdAt?: string;
+}
+
+export interface RadarRunResult {
+  runCount: number;
+  observationsCreated: number;
+  eventsUpdated: number;
+  alertsCreated: number;
+  status: string;
+}
+
+export interface RadarEventSummary {
+  id: string;
+  title: string;
+  summary: string;
+  primaryDomain: string;
+  domains: string[];
+  occurredAt: string;
+  publishedAt: string;
+  observedAt: string;
+  ingestedAt: string;
+  timePrecision: string;
+  status: string;
+  priorityScore: number;
+  priorityTier: string;
+  confidenceLabel: string;
+  independentSources: number;
+  alertKind: string;
+}
+
+export interface RadarEventsResponse {
+  events: RadarEventSummary[];
+  count: number;
+}
+
+export interface RadarEvidenceRecord {
+  artifactId: string;
+  sourceUri: string;
+  title: string;
+  language: string;
+  independenceGroup: string;
+  capturedAt: string;
+  excerpt: string;
+}
+
+export interface RadarAssessment {
+  impact: number;
+  urgency: number;
+  relevance: number;
+  velocity: number;
+  novelty: number;
+  actionability: number;
+  exposure: number;
+  priorityScore: number;
+  priorityTier: string;
+  confidenceLabel: string;
+  uncertaintyFlags: string[];
+  rationale: string;
+}
+
+export interface RadarEventDetailResponse {
+  event: RadarEventSummary;
+  evidence: RadarEvidenceRecord[];
+  assessment: RadarAssessment;
+}
+
+export interface RadarAlertRecord {
+  id: string;
+  instanceId: string;
+  eventId: string;
+  priorityTier: string;
+  confidenceLabel: string;
+  alertKind: string;
+  title: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface RadarAlertsResponse {
+  alerts: RadarAlertRecord[];
+  count: number;
+}
+
+export interface RadarReportRecord {
+  id: string;
+  instanceId: string;
+  title: string;
+  scope: string;
+  observedFacts: string[];
+  reportedClaims: string[];
+  inferences: string[];
+  unknowns: string[];
+  evidenceRefs: string[];
+  createdAt: string;
+}
+
+export interface RadarReportsResponse {
+  reports: RadarReportRecord[];
+  count: number;
+}
+
+export interface RadarConnectorHealth {
+  connectorId: string;
+  lastAttemptAt: string;
+  lastSuccessAt: string;
+  lastStatus: string;
+  lastError: string;
+  totalRuns: number;
+  failedRuns: number;
+}
+
+export interface RadarConnectorsHealthResponse {
+  connectors: RadarConnectorHealth[];
+  count: number;
+}
+
+export interface RadarFeedbackInput {
+  targetKind: string;
+  targetId: string;
+  vote: 'accurate' | 'disputed' | 'false_positive' | string;
+  reason: string;
+}
+
 // --- AI Gateway (Bifrost + 9Router + Magpie + FreeLLMAPI) ---
 
 export type AiProviderKind = 'openai_compat' | 'anthropic' | 'gemini' | string;
@@ -742,6 +1254,402 @@ export function scanObservatoryRepos(roots: string[]): Promise<GitRepoRadarRespo
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ roots }),
+  });
+}
+
+// --- WhatsApp (GOWA) ---
+
+export function fetchWhatsAppStats(): Promise<WhatsAppStats> {
+  return requestJson<WhatsAppStats>('/api/whatsapp/stats');
+}
+
+export function fetchWhatsAppDevices(): Promise<WhatsAppDevicesResponse> {
+  return requestJson<WhatsAppDevicesResponse>('/api/whatsapp/devices');
+}
+
+export function createWhatsAppDevice(payload: WhatsAppDeviceCreateInput): Promise<WhatsAppDevice> {
+  return requestJson<WhatsAppDevice>('/api/whatsapp/devices', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteWhatsAppDevice(deviceId: string): Promise<{ deleted: boolean }> {
+  return requestJson<{ deleted: boolean }>(`/api/whatsapp/devices/${encodeURIComponent(deviceId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export function loginWhatsAppDevice(deviceId: string): Promise<WhatsAppDevice> {
+  return requestJson<WhatsAppDevice>(`/api/whatsapp/devices/${encodeURIComponent(deviceId)}/login`, {
+    method: 'POST',
+  });
+}
+
+export function pairWhatsAppDevice(deviceId: string, phone: string): Promise<WhatsAppPairResponse> {
+  return requestJson<WhatsAppPairResponse>(
+    `/api/whatsapp/devices/${encodeURIComponent(deviceId)}/pair`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone }),
+    },
+  );
+}
+
+export function logoutWhatsAppDevice(deviceId: string): Promise<{ status: string }> {
+  return requestJson<{ status: string }>(
+    `/api/whatsapp/devices/${encodeURIComponent(deviceId)}/logout`,
+    {
+      method: 'POST',
+    },
+  );
+}
+
+export function reconnectWhatsAppDevice(deviceId: string): Promise<WhatsAppDevice> {
+  return requestJson<WhatsAppDevice>(
+    `/api/whatsapp/devices/${encodeURIComponent(deviceId)}/reconnect`,
+    {
+      method: 'POST',
+    },
+  );
+}
+
+export function patchWhatsAppDeviceConfig(
+  deviceId: string,
+  patch: WhatsAppDeviceConfigPatch,
+): Promise<WhatsAppDevice> {
+  return requestJson<WhatsAppDevice>(
+    `/api/whatsapp/devices/${encodeURIComponent(deviceId)}/config`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    },
+  );
+}
+
+function normalizeWhatsAppChat(rawChat: unknown): WhatsAppChat {
+  const rec = asRecord(rawChat);
+  return {
+    deviceId: pickString(rec, ['deviceId', 'device_id']),
+    jid: pickString(rec, ['jid']),
+    name: pickString(rec, ['name']),
+    archived: pickBoolean(rec, ['archived'], false),
+    unreadCount: pickNumber(rec, ['unreadCount', 'unread_count'], 0),
+    lastMessage: pickString(rec, ['lastMessage', 'last_message']),
+    lastMessageTime: pickString(rec, ['lastMessageTime', 'last_message_time']),
+  };
+}
+
+function normalizeWhatsAppMessage(rawMsg: unknown): WhatsAppMessage {
+  const rec = asRecord(rawMsg);
+  return {
+    id: pickString(rec, ['id']),
+    deviceId: pickString(rec, ['deviceId', 'device_id']),
+    chatJid: pickString(rec, ['chatJid', 'chat_jid']),
+    senderJid: pickString(rec, ['senderJid', 'sender_jid']),
+    fromMe: pickBoolean(rec, ['fromMe', 'from_me'], false),
+    msgType: pickString(rec, ['msgType', 'msg_type'], 'text'),
+    body: pickString(rec, ['body']),
+    mediaObjectId: pickString(rec, ['mediaObjectId', 'media_object_id']) || undefined,
+    status: pickString(rec, ['status']),
+    timestamp: pickString(rec, ['timestamp']),
+  };
+}
+
+export async function fetchWhatsAppChats(filters: {
+  deviceId?: string;
+  query?: string;
+  limit?: number;
+} = {}): Promise<WhatsAppChatsResponse> {
+  const params = new URLSearchParams();
+  if (filters.deviceId?.trim()) params.set('deviceId', filters.deviceId.trim());
+  if (filters.query?.trim()) params.set('q', filters.query.trim());
+  params.set('limit', String(filters.limit ?? 100));
+  const rawReply = await requestJson<unknown>(`/api/whatsapp/chats?${params.toString()}`);
+  const rec = asRecord(rawReply);
+  const rawList = Array.isArray(rec.chats) ? rec.chats : [];
+  const chats = rawList.map(normalizeWhatsAppChat);
+  return {
+    chats,
+    count: pickNumber(rec, ['count'], chats.length),
+  };
+}
+
+export async function fetchWhatsAppMessages(
+  chatJid: string,
+  deviceId?: string,
+  limit = 100,
+): Promise<WhatsAppMessagesResponse> {
+  const params = new URLSearchParams();
+  if (deviceId?.trim()) params.set('deviceId', deviceId.trim());
+  params.set('limit', String(limit));
+  const rawReply = await requestJson<unknown>(
+    `/api/whatsapp/chats/${encodeURIComponent(chatJid)}/messages?${params.toString()}`,
+  );
+  const rec = asRecord(rawReply);
+  const rawList = Array.isArray(rec.messages) ? rec.messages : [];
+  const messages = rawList.map(normalizeWhatsAppMessage);
+  return {
+    messages,
+    count: pickNumber(rec, ['count'], messages.length),
+  };
+}
+
+export function sendWhatsAppMessage(payload: WhatsAppSendInput): Promise<WhatsAppSendResponse> {
+  return requestJson<WhatsAppSendResponse>('/api/whatsapp/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+// --- Built-In Coding Agent (10 CODER) ---
+
+export function fetchCodingSessions(): Promise<CodingSessionsListResponse> {
+  return requestJson<CodingSessionsListResponse>('/api/agent/sessions');
+}
+
+export function createCodingSession(payload: CodingSessionCreateInput): Promise<CodingSession> {
+  return requestJson<CodingSession>('/api/agent/sessions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchCodingSessionDetail(sessionId: string): Promise<CodingSessionDetailResponse> {
+  return requestJson<CodingSessionDetailResponse>(
+    `/api/agent/sessions/${encodeURIComponent(sessionId)}`,
+  );
+}
+
+export function patchCodingSession(
+  sessionId: string,
+  patch: CodingSessionPatchInput,
+): Promise<CodingSession> {
+  return requestJson<CodingSession>(`/api/agent/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteCodingSession(sessionId: string): Promise<{ deleted: boolean }> {
+  return requestJson<{ deleted: boolean }>(`/api/agent/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export function sendCodingPrompt(
+  sessionId: string,
+  prompt: string,
+): Promise<Record<string, unknown>> {
+  return requestJson<Record<string, unknown>>(
+    `/api/agent/sessions/${encodeURIComponent(sessionId)}/prompt`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, async: true }),
+    },
+  );
+}
+
+export function abortCodingSession(sessionId: string): Promise<{ aborted: boolean }> {
+  return requestJson<{ aborted: boolean }>(
+    `/api/agent/sessions/${encodeURIComponent(sessionId)}/abort`,
+    {
+      method: 'POST',
+    },
+  );
+}
+
+export function forkCodingSession(sessionId: string, title?: string): Promise<CodingSession> {
+  return requestJson<CodingSession>(`/api/agent/sessions/${encodeURIComponent(sessionId)}/fork`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(title ? { title } : {}),
+  });
+}
+
+export function compactCodingSession(sessionId: string): Promise<CodingCompactResponse> {
+  return requestJson<CodingCompactResponse>(
+    `/api/agent/sessions/${encodeURIComponent(sessionId)}/compact`,
+    {
+      method: 'POST',
+    },
+  );
+}
+
+// --- Gamification (11 ARENA) ---
+
+export function fetchGameProfile(): Promise<GameProfile> {
+  return requestJson<GameProfile>('/api/game/profile');
+}
+
+export function claimGameQuest(questId: string): Promise<GameQuestClaimResponse> {
+  return requestJson<GameQuestClaimResponse>(
+    `/api/game/quests/${encodeURIComponent(questId)}/claim`,
+    {
+      method: 'POST',
+    },
+  );
+}
+
+// --- AI Sidekick ("SHADOW SIDEKICK") ---
+
+export function fetchSidekickPersonas(): Promise<SidekickPersonasResponse> {
+  return requestJson<SidekickPersonasResponse>('/api/assistant/personas');
+}
+
+export function fetchSidekickHistory(limit = 60): Promise<SidekickHistoryResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return requestJson<SidekickHistoryResponse>(`/api/assistant/history?${params.toString()}`);
+}
+
+export function sendSidekickChat(payload: SidekickChatInput): Promise<SidekickMessage> {
+  return requestJson<SidekickMessage>('/api/assistant/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function requestSidekickBrief(persona: string): Promise<SidekickMessage> {
+  return requestJson<SidekickMessage>('/api/assistant/brief', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ persona }),
+  });
+}
+
+export function clearSidekickHistory(): Promise<{ cleared: boolean }> {
+  return requestJson<{ cleared: boolean }>('/api/assistant/history', {
+    method: 'DELETE',
+  });
+}
+
+// --- R!OTS World Radar Network (12 WORLD) ---
+
+export function fetchRadarDomains(): Promise<RadarDomainsResponse> {
+  return requestJson<RadarDomainsResponse>('/api/radar/domains');
+}
+
+export function fetchRadarLenses(): Promise<RadarLensesResponse> {
+  return requestJson<RadarLensesResponse>('/api/radar/lenses');
+}
+
+export function fetchRadarPacks(): Promise<RadarPacksResponse> {
+  return requestJson<RadarPacksResponse>('/api/radar/packs');
+}
+
+export function installRadarPack(
+  packId: string,
+  payload: { name?: string; mode?: string } = {},
+): Promise<RadarInstance> {
+  return requestJson<RadarInstance>(`/api/radar/packs/${encodeURIComponent(packId)}/install`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchRadarInstances(): Promise<RadarInstancesResponse> {
+  return requestJson<RadarInstancesResponse>('/api/radar/instances');
+}
+
+export function addRadarTarget(
+  instanceId: string,
+  payload: WatchTargetCreateInput,
+): Promise<WatchTargetRecord> {
+  return requestJson<WatchTargetRecord>(
+    `/api/radar/instances/${encodeURIComponent(instanceId)}/targets`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function runRadarInstance(instanceId: string): Promise<RadarRunResult> {
+  return requestJson<RadarRunResult>(
+    `/api/radar/instances/${encodeURIComponent(instanceId)}/run`,
+    {
+      method: 'POST',
+    },
+  );
+}
+
+export function pauseRadarInstance(
+  instanceId: string,
+): Promise<{ instanceId: string; status: string }> {
+  return requestJson<{ instanceId: string; status: string }>(
+    `/api/radar/instances/${encodeURIComponent(instanceId)}/pause`,
+    {
+      method: 'POST',
+    },
+  );
+}
+
+export function fetchRadarEvents(domain = '', limit = 50): Promise<RadarEventsResponse> {
+  const params = new URLSearchParams();
+  if (domain.trim()) params.set('domain', domain.trim());
+  params.set('limit', String(limit));
+  return requestJson<RadarEventsResponse>(`/api/radar/events?${params.toString()}`);
+}
+
+export function fetchRadarEventDetail(eventId: string): Promise<RadarEventDetailResponse> {
+  return requestJson<RadarEventDetailResponse>(
+    `/api/radar/events/${encodeURIComponent(eventId)}`,
+  );
+}
+
+export function fetchRadarAlerts(status = ''): Promise<RadarAlertsResponse> {
+  const params = new URLSearchParams();
+  if (status.trim()) params.set('status', status.trim());
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  return requestJson<RadarAlertsResponse>(`/api/radar/alerts${suffix}`);
+}
+
+export function acknowledgeRadarAlert(alertId: string): Promise<RadarAlertRecord> {
+  return requestJson<RadarAlertRecord>(
+    `/api/radar/alerts/${encodeURIComponent(alertId)}/acknowledge`,
+    {
+      method: 'POST',
+    },
+  );
+}
+
+export function fetchRadarReports(): Promise<RadarReportsResponse> {
+  return requestJson<RadarReportsResponse>('/api/radar/reports');
+}
+
+export function createRadarReport(payload: {
+  instanceId: string;
+  title: string;
+  scope: string;
+}): Promise<RadarReportRecord> {
+  return requestJson<RadarReportRecord>('/api/radar/reports', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchRadarSourcesHealth(): Promise<RadarConnectorsHealthResponse> {
+  return requestJson<RadarConnectorsHealthResponse>('/api/radar/sources/health');
+}
+
+export function submitRadarFeedback(
+  payload: RadarFeedbackInput,
+): Promise<{ recorded: boolean }> {
+  return requestJson<{ recorded: boolean }>('/api/radar/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
 }
 

@@ -406,4 +406,102 @@ func TestProjectsAIGatewayAndObservatoryRoutes(t *testing.T) {
 	if missRec.Code != http.StatusNotFound {
 		t.Fatalf("GET /api/nonexistent-endpoint expected 404, got %d", missRec.Code)
 	}
+
+	// 5. Native GOWA WhatsApp, Coding Agent, Gamification, and Shadow Sidekick endpoints
+	pingRec := httptest.NewRecorder()
+	handler.ServeHTTP(pingRec, httptest.NewRequest(http.MethodGet, "/api/ping", nil))
+	if pingRec.Code != http.StatusOK || !strings.Contains(pingRec.Body.String(), `"ok":true`) {
+		t.Fatalf("GET /api/ping failed: %d %s", pingRec.Code, pingRec.Body.String())
+	}
+
+	gowaInfoRec := httptest.NewRecorder()
+	handler.ServeHTTP(gowaInfoRec, httptest.NewRequest(http.MethodGet, "/app/info", nil))
+	if gowaInfoRec.Code != http.StatusOK || !strings.Contains(gowaInfoRec.Body.String(), `"SUCCESS"`) {
+		t.Fatalf("GET /app/info failed: %d %s", gowaInfoRec.Code, gowaInfoRec.Body.String())
+	}
+
+	waStatsRec := httptest.NewRecorder()
+	handler.ServeHTTP(waStatsRec, httptest.NewRequest(http.MethodGet, "/api/whatsapp/stats", nil))
+	if waStatsRec.Code != http.StatusOK || !strings.Contains(waStatsRec.Body.String(), `"whatsmeow"`) {
+		t.Fatalf("GET /api/whatsapp/stats failed: %d %s", waStatsRec.Code, waStatsRec.Body.String())
+	}
+
+	toolsRec := httptest.NewRecorder()
+	handler.ServeHTTP(toolsRec, httptest.NewRequest(http.MethodGet, "/api/agent/tools", nil))
+	if toolsRec.Code != http.StatusOK || !strings.Contains(toolsRec.Body.String(), "edit_file") {
+		t.Fatalf("GET /api/agent/tools failed: %d %s", toolsRec.Code, toolsRec.Body.String())
+	}
+
+	gameRec := httptest.NewRecorder()
+	handler.ServeHTTP(gameRec, httptest.NewRequest(http.MethodGet, "/api/game/profile", nil))
+	if gameRec.Code != http.StatusOK || !strings.Contains(gameRec.Body.String(), `"rankTitle"`) {
+		t.Fatalf("GET /api/game/profile failed: %d %s", gameRec.Code, gameRec.Body.String())
+	}
+
+	personasRec := httptest.NewRecorder()
+	handler.ServeHTTP(personasRec, httptest.NewRequest(http.MethodGet, "/api/assistant/personas", nil))
+	if personasRec.Code != http.StatusOK || !strings.Contains(personasRec.Body.String(), "tactician") {
+		t.Fatalf("GET /api/assistant/personas failed: %d %s", personasRec.Code, personasRec.Body.String())
+	}
+}
+
+func TestWorldRadarAndStorageBackupRoutes(t *testing.T) {
+	_, handler := setupTestEcho(t, "")
+
+	// 1. World Radar domains (D01..D23), packs, and sources health
+	domainsRec := httptest.NewRecorder()
+	handler.ServeHTTP(domainsRec, httptest.NewRequest(http.MethodGet, "/api/radar/domains", nil))
+	if domainsRec.Code != http.StatusOK ||
+		!strings.Contains(domainsRec.Body.String(), `"count":23`) ||
+		!strings.Contains(domainsRec.Body.String(), `"D01"`) ||
+		!strings.Contains(domainsRec.Body.String(), `"D23"`) {
+		t.Fatalf("GET /api/radar/domains failed: %d %s", domainsRec.Code, domainsRec.Body.String())
+	}
+
+	packsRec := httptest.NewRecorder()
+	handler.ServeHTTP(packsRec, httptest.NewRequest(http.MethodGet, "/api/radar/packs", nil))
+	if packsRec.Code != http.StatusOK || !strings.Contains(packsRec.Body.String(), `"packs"`) {
+		t.Fatalf("GET /api/radar/packs failed: %d %s", packsRec.Code, packsRec.Body.String())
+	}
+
+	healthRec := httptest.NewRecorder()
+	handler.ServeHTTP(healthRec, httptest.NewRequest(http.MethodGet, "/api/radar/sources/health", nil))
+	if healthRec.Code != http.StatusOK || !strings.Contains(healthRec.Body.String(), `"sources"`) {
+		t.Fatalf("GET /api/radar/sources/health failed: %d %s", healthRec.Code, healthRec.Body.String())
+	}
+
+	// 2. MCP tools/list exposes echo_radar_events & echo_radar_run and echo_radar_events executes
+	mcpListReq := httptest.NewRequest(http.MethodPost, "/api/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	mcpListReq.Header.Set("Content-Type", "application/json")
+	mcpListRec := httptest.NewRecorder()
+	handler.ServeHTTP(mcpListRec, mcpListReq)
+	if mcpListRec.Code != http.StatusOK ||
+		!strings.Contains(mcpListRec.Body.String(), "echo_radar_events") ||
+		!strings.Contains(mcpListRec.Body.String(), "echo_radar_run") {
+		t.Fatalf("MCP tools/list missing radar tools: %d %s", mcpListRec.Code, mcpListRec.Body.String())
+	}
+
+	mcpCallReq := httptest.NewRequest(http.MethodPost, "/api/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo_radar_events","arguments":{"limit":5}}}`))
+	mcpCallReq.Header.Set("Content-Type", "application/json")
+	mcpCallRec := httptest.NewRecorder()
+	handler.ServeHTTP(mcpCallRec, mcpCallReq)
+	if mcpCallRec.Code != http.StatusOK || strings.Contains(mcpCallRec.Body.String(), `"error"`) {
+		t.Fatalf("MCP echo_radar_events failed: %d %s", mcpCallRec.Code, mcpCallRec.Body.String())
+	}
+
+	// 3. POST /api/storage/backup snapshots DBs to 9Drive system-backups and awards +35 XP
+	backupRec := httptest.NewRecorder()
+	handler.ServeHTTP(backupRec, httptest.NewRequest(http.MethodPost, "/api/storage/backup", nil))
+	if backupRec.Code != http.StatusOK ||
+		!strings.Contains(backupRec.Body.String(), `"backups"`) ||
+		!strings.Contains(backupRec.Body.String(), "mw-echo.db") ||
+		!strings.Contains(backupRec.Body.String(), "system-backups") {
+		t.Fatalf("POST /api/storage/backup failed: %d %s", backupRec.Code, backupRec.Body.String())
+	}
+
+	feedRec := httptest.NewRecorder()
+	handler.ServeHTTP(feedRec, httptest.NewRequest(http.MethodGet, "/api/game/feed", nil))
+	if feedRec.Code != http.StatusOK || !strings.Contains(feedRec.Body.String(), "vault_backup") {
+		t.Fatalf("expected vault_backup XP event in /api/game/feed, got %d %s", feedRec.Code, feedRec.Body.String())
+	}
 }

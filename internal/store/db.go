@@ -20,6 +20,7 @@ type HubStore struct {
 	db      *sql.DB
 	dataDir string
 	blobDir string
+	closers []func() error
 }
 
 type DocRecord struct {
@@ -93,8 +94,24 @@ func Open(dataDir string) (*HubStore, error) {
 	return hub, nil
 }
 
+// RegisterCloser registers a module cleanup callback invoked when HubStore.Close runs.
+func (s *HubStore) RegisterCloser(fn func() error) {
+	if fn != nil {
+		s.closers = append(s.closers, fn)
+	}
+}
+
 func (s *HubStore) Close() error {
-	return s.db.Close()
+	var firstErr error
+	for i := len(s.closers) - 1; i >= 0; i-- {
+		if err := s.closers[i](); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if err := s.db.Close(); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	return firstErr
 }
 
 func (s *HubStore) DataDir() string {

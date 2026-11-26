@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import {
   Activity,
+  ArrowRight,
   BookOpen,
   Check,
   CheckSquare,
   Cloud,
   Copy,
   FolderGit2,
+  MessageSquare,
   RefreshCw,
   Sparkles,
   Terminal,
@@ -18,17 +20,26 @@ import {
   type HubStats,
   type ImportSummary,
   type PoolSummary,
+  type WhatsAppStats,
 } from '../api';
 import { copyTextToClipboard, formatBytes, formatCompactNumber } from '../utils';
-import { CopyableSnippet, MonoBadge, SectionCard, StatTile } from './UiPrimitives';
+import {
+  CopyableSnippet,
+  MonoBadge,
+  SectionCard,
+  StageHeroBanner,
+  StatTile,
+} from './UiPrimitives';
 
 interface OverviewTabProps {
   hubStats: HubStats | null;
   poolSummary: PoolSummary | null;
   aiStats: AiGatewayStats | null;
+  whatsappStats: WhatsAppStats | null;
   aiAvailable: boolean;
   isRefreshing: boolean;
   onRefreshAll: () => Promise<void>;
+  onOpenWhatsApp: () => void;
   onNotify: (tone: 'ok' | 'err' | 'info', message: string) => void;
 }
 
@@ -44,9 +55,11 @@ export function OverviewTab({
   hubStats,
   poolSummary,
   aiStats,
+  whatsappStats,
   aiAvailable,
   isRefreshing,
   onRefreshAll,
+  onOpenWhatsApp,
   onNotify,
 }: OverviewTabProps) {
   const [repoDir, setRepoDir] = useState('Z:\\repo\\mw-xv');
@@ -105,101 +118,101 @@ export function OverviewTab({
   );
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-extrabold tracking-tight text-[#f3efe4]">
-            CONTROL HUB OVERVIEW
-          </h1>
-          <p className="font-mono text-xs text-[#9c988c]">
-            Local SQLite FTS5 + TaskOS v2 + 9Drive Cloud Pool + Bifrost/Magpie/9Router AI Gateway
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void onRefreshAll()}
-          disabled={isRefreshing}
-          className="inline-flex items-center gap-2 rounded-md border border-[#2a2a36] bg-[#15151a] px-3 py-1.5 font-mono text-xs font-semibold text-[#f3efe4] transition-colors hover:border-[#ffe031] hover:text-[#ffe031] disabled:opacity-50"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-          SYNC TELEMETRY
-        </button>
-      </div>
+    <div className="space-y-6">
+      <StageHeroBanner
+        sceneCode="SCENE 01"
+        sticker="HQ STAGE"
+        title="MOONWITNESS COMMAND DECK"
+        subtitle="SQLITE FTS5 CODEX + TASKOS BOUNTY + GOWA COMMS + 9DRIVE VAULT + BIFROST/MAGPIE/9ROUTER RIG"
+        tone="yellow"
+        actions={
+          <button
+            type="button"
+            onClick={() => void onRefreshAll()}
+            disabled={isRefreshing}
+            className="riot-btn inline-flex items-center gap-2 bg-[#ffe031] px-4 py-2 font-mono text-xs font-extrabold text-[#08080c] uppercase disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            SYNC TELEMETRY
+          </button>
+        }
+      />
 
-      {/* 6 Combined Hub & AI Metrics */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      {/* 6 Explosive Comic Stat Stamps */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatTile
-          label="Docs FTS5"
+          label="CODEX DOCS"
           value={hubStats ? formatCompactNumber(hubStats.docsCount) : '—'}
           sublabel={`${Object.keys(hubStats?.docsByProject ?? {}).length} project(s) indexed`}
           icon={<BookOpen className="h-4 w-4" />}
           tone="yellow"
         />
         <StatTile
-          label="Tasks Open / Total"
-          value={hubStats ? `${openTasks} / ${totalTasks}` : '—'}
-          sublabel={`${doneCount} completed`}
+          label="BOUNTY OPEN"
+          value={hubStats ? `${openTasks}/${totalTasks}` : '—'}
+          sublabel={`${doneCount} cleared`}
           icon={<CheckSquare className="h-4 w-4" />}
           tone="cyan"
         />
         <StatTile
-          label="9Drive Free Space"
+          label="VAULT FREE"
           value={poolSummary ? formatBytes(poolSummary.totalFreeBytes) : '—'}
           sublabel={
             poolSummary
-              ? `${poolSummary.providers.length} account(s) · ${formatBytes(poolSummary.totalQuotaBytes)} cap`
+              ? `${poolSummary.providers.length} acct · ${formatBytes(poolSummary.totalQuotaBytes)} cap`
               : 'Loading pool...'
           }
           icon={<Cloud className="h-4 w-4" />}
           tone="ok"
         />
         <StatTile
-          label="AI Requests"
+          label="RIG SORTIES"
           value={aiAvailable && aiStats ? formatCompactNumber(aiStats.totalRequests) : '0'}
           sublabel={
-            aiAvailable && aiStats
-              ? `${aiStats.providersCount} provider(s) active`
-              : 'Gateway standby'
+            aiAvailable && aiStats ? `${aiStats.providersCount} provider(s) armed` : 'Rig standby'
           }
           icon={<Activity className="h-4 w-4" />}
           tone="magenta"
         />
         <StatTile
-          label="RTK Tokens Saved"
+          label="RTK SAVED"
           value={aiAvailable && aiStats ? formatCompactNumber(aiStats.totalRtkTokensSaved) : '0'}
           sublabel={
             aiAvailable && aiStats
-              ? `${Math.round(aiStats.avgLatencyMs)}ms avg gateway latency`
-              : 'RTK compression ready'
+              ? `${Math.round(aiStats.avgLatencyMs)}ms avg latency`
+              : 'Turbo ready'
           }
           icon={<Sparkles className="h-4 w-4" />}
           tone="yellow"
         />
         <StatTile
-          label="Exact Cache Hits"
+          label="CACHE HITS"
           value={aiAvailable && aiStats ? formatCompactNumber(aiStats.cacheHits) : '0'}
           sublabel={
             aiAvailable && aiStats
-              ? `${formatCompactNumber(aiStats.cacheTokensSaved)} cached tok saved`
-              : 'Exact cache ready'
+              ? `${formatCompactNumber(aiStats.cacheTokensSaved)} tok saved`
+              : 'Cache armed'
           }
           icon={<Zap className="h-4 w-4" />}
           tone="cyan"
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        {/* One-Click Local Repo Importer */}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+        {/* Local Repo Importer Deck */}
         <SectionCard
-          title="One-Click Local Repository Importer"
-          subtitle="Ingests Markdown docs into SQLite FTS5, TaskOS v2 tasks.json, and optional media assets."
+          title="ONE-CLICK REPO INGESTOR"
+          subtitle="Slams Markdown docs into SQLite FTS5, TaskOS v2 tasks.json, and SHA-256 media blobs."
           icon={<FolderGit2 className="h-4 w-4" />}
+          sticker="FAST LOAD"
+          stickerTone="cyan"
+          accent="yellow"
           className="xl:col-span-7"
         >
-          <form onSubmit={handleImportSubmit} className="space-y-3">
+          <form onSubmit={handleImportSubmit} className="space-y-3.5">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="sm:col-span-2">
-                <label className="mb-1 block font-mono text-[11px] uppercase text-[#9c988c]">
+                <label className="mb-1 block font-mono text-[11px] font-bold uppercase text-[#ffe031]">
                   Repository Directory
                 </label>
                 <input
@@ -207,11 +220,11 @@ export function OverviewTab({
                   value={repoDir}
                   onChange={(ev) => setRepoDir(ev.target.value)}
                   placeholder="Z:\repo\mw-xv"
-                  className="w-full rounded-md border border-[#2a2a36] bg-[#0d0d10] px-3 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                  className="riot-input w-full px-3 py-2 font-mono text-xs"
                 />
               </div>
               <div>
-                <label className="mb-1 block font-mono text-[11px] uppercase text-[#9c988c]">
+                <label className="mb-1 block font-mono text-[11px] font-bold uppercase text-[#00f0ff]">
                   Project Slug
                 </label>
                 <input
@@ -219,37 +232,37 @@ export function OverviewTab({
                   value={projectSlug}
                   onChange={(ev) => setProjectSlug(ev.target.value)}
                   placeholder="moonwitness"
-                  className="w-full rounded-md border border-[#2a2a36] bg-[#0d0d10] px-3 py-2 font-mono text-xs text-[#f3efe4] focus:border-[#ffe031] focus:outline-none"
+                  className="riot-input w-full px-3 py-2 font-mono text-xs"
                 />
               </div>
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-              <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-[#f3efe4]">
+              <label className="inline-flex cursor-pointer items-center gap-2 font-mono text-xs font-bold text-[#fff6de]">
                 <input
                   type="checkbox"
                   checked={includeAssets}
                   onChange={(ev) => setIncludeAssets(ev.target.checked)}
                   className="h-4 w-4 accent-[#ffe031]"
                 />
-                <span>Include media assets (SHA-256 deduplicated blobs)</span>
+                <span>INCLUDE MEDIA ASSETS (SHA-256 DEDUPED)</span>
               </label>
 
               <button
                 type="submit"
                 disabled={importing}
-                className="inline-flex items-center gap-2 rounded-md bg-[#ffe031] px-4 py-2 font-mono text-xs font-extrabold text-[#0d0d10] transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="riot-btn inline-flex items-center gap-2 bg-[#ff2e88] px-5 py-2 font-display text-xs tracking-wider text-white uppercase disabled:opacity-50"
               >
-                <FolderGit2 className="h-3.5 w-3.5" />
-                {importing ? 'IMPORTING...' : 'IMPORT REPO NOW'}
+                <FolderGit2 className="h-4 w-4" />
+                {importing ? 'INGESTING...' : 'BLAST IMPORT!'}
               </button>
             </div>
           </form>
 
           {lastImport ? (
-            <div className="mt-4 rounded-md border border-[#22c55e]/40 bg-[#0d0d10] p-3">
-              <div className="mb-2 flex flex-wrap items-center gap-2">
-                <MonoBadge tone="ok">IMPORT COMPLETE</MonoBadge>
+            <div className="mt-4 border-2 border-black bg-[#08080c] p-3 shadow-[4px_4px_0_#a3ff12]">
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                <MonoBadge tone="ok">IMPORT CLEARED</MonoBadge>
                 <MonoBadge tone="yellow">{lastImport.docsImported} DOCS</MonoBadge>
                 <MonoBadge tone="cyan">{lastImport.tasksImported} TASKS</MonoBadge>
                 <MonoBadge tone="magenta">{lastImport.assetsImported} ASSETS</MonoBadge>
@@ -257,17 +270,16 @@ export function OverviewTab({
                   <MonoBadge tone="err">{lastImport.skippedTooLarge} SKIPPED</MonoBadge>
                 ) : null}
               </div>
-              <div className="font-mono text-[11px] text-[#9c988c]">
-                Source: {lastImport.sourceDir} → Project: {lastImport.project}
+              <div className="font-mono text-[11px] text-[#a6a2b8]">
+                {lastImport.sourceDir} -&gt; {lastImport.project}
               </div>
             </div>
           ) : null}
 
-          {/* Index & Task Distribution */}
-          <div className="mt-4 grid grid-cols-1 gap-3 border-t border-[#2a2a36] pt-4 sm:grid-cols-2">
-            <div className="rounded-md border border-[#2a2a36] bg-[#0d0d10] p-3">
-              <div className="mb-2 font-mono text-[11px] font-semibold uppercase text-[#9c988c]">
-                Tasks By Status
+          <div className="mt-4 grid grid-cols-1 gap-3 border-t-2 border-black pt-4 sm:grid-cols-2">
+            <div className="border-2 border-black bg-[#08080c] p-3 shadow-[3px_3px_0_#000]">
+              <div className="mb-2 font-mono text-[10px] font-extrabold uppercase text-[#ffe031]">
+                Bounty Status Breakdown
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {taskStatusEntries.length > 0 ? (
@@ -277,7 +289,7 @@ export function OverviewTab({
                       tone={
                         statusName === 'done'
                           ? 'ok'
-                          : statusName === 'doing'
+                          : statusName === 'doing' || statusName === 'in_progress'
                             ? 'yellow'
                             : statusName === 'blocked'
                               ? 'err'
@@ -288,44 +300,47 @@ export function OverviewTab({
                     </MonoBadge>
                   ))
                 ) : (
-                  <span className="font-mono text-xs text-[#9c988c]">No tasks indexed yet.</span>
+                  <span className="font-mono text-xs text-[#a6a2b8]">No tasks indexed yet.</span>
                 )}
               </div>
             </div>
 
-            <div className="rounded-md border border-[#2a2a36] bg-[#0d0d10] p-3">
-              <div className="mb-2 font-mono text-[11px] font-semibold uppercase text-[#9c988c]">
-                Docs By Project
+            <div className="border-2 border-black bg-[#08080c] p-3 shadow-[3px_3px_0_#000]">
+              <div className="mb-2 font-mono text-[10px] font-extrabold uppercase text-[#00f0ff]">
+                Codex By Arc
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {docsProjectEntries.length > 0 ? (
                   docsProjectEntries.map(([projName, docCount]) => (
-                    <MonoBadge key={projName} tone="neutral">
+                    <MonoBadge key={projName} tone="cream">
                       {projName}: {docCount}
                     </MonoBadge>
                   ))
                 ) : (
-                  <span className="font-mono text-xs text-[#9c988c]">No docs indexed yet.</span>
+                  <span className="font-mono text-xs text-[#a6a2b8]">No docs indexed yet.</span>
                 )}
               </div>
             </div>
           </div>
         </SectionCard>
 
-        {/* Quick Copy Agent Env Snippets */}
+        {/* Agent Env Cartridge + GOWA Quick Launch */}
         <SectionCard
-          title="Quick Copy Agent Env Snippets"
-          subtitle="Point Claude Code, Codex, Gemini CLI, OpenCode & MCP clients to mw-echo."
+          title="AGENT LAUNCH CARTRIDGES"
+          subtitle="Wire Claude Code, Codex, Gemini CLI, OpenCode & MCP clients straight to mw-echo."
           icon={<Terminal className="h-4 w-4" />}
+          sticker="LIVE"
+          stickerTone="ok"
+          accent="magenta"
           actions={
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => void handleCopyShellBlock('pwsh')}
-                className="inline-flex items-center gap-1 rounded border border-[#2a2a36] bg-[#1c1c23] px-2 py-1 font-mono text-[11px] font-semibold text-[#ffe031] hover:border-[#ffe031]"
+                className="riot-btn inline-flex items-center gap-1 bg-[#ffe031] px-2.5 py-1 font-mono text-[11px] font-extrabold text-[#08080c]"
               >
                 {copiedShell === 'pwsh' ? (
-                  <Check className="h-3 w-3 text-[#22c55e]" />
+                  <Check className="h-3 w-3" />
                 ) : (
                   <Copy className="h-3 w-3" />
                 )}
@@ -334,10 +349,10 @@ export function OverviewTab({
               <button
                 type="button"
                 onClick={() => void handleCopyShellBlock('bash')}
-                className="inline-flex items-center gap-1 rounded border border-[#2a2a36] bg-[#1c1c23] px-2 py-1 font-mono text-[11px] font-semibold text-[#00b8f0] hover:border-[#00b8f0]"
+                className="riot-btn inline-flex items-center gap-1 bg-[#00f0ff] px-2.5 py-1 font-mono text-[11px] font-extrabold text-[#08080c]"
               >
                 {copiedShell === 'bash' ? (
-                  <Check className="h-3 w-3 text-[#22c55e]" />
+                  <Check className="h-3 w-3" />
                 ) : (
                   <Copy className="h-3 w-3" />
                 )}
@@ -363,12 +378,43 @@ export function OverviewTab({
               value="http://127.0.0.1:4310/api/mcp"
               tone="magenta"
             />
-            <div className="rounded-md border border-[#2a2a36] bg-[#0d0d10] px-3 py-2 font-mono text-[11px] text-[#9c988c]">
-              <div className="flex items-center justify-between">
-                <span>HUB DATA DIR</span>
-                <span className="text-[#22c55e]">ONLINE</span>
+
+            {/* GOWA Comms Quick Launch Strip */}
+            <div className="flex items-center justify-between gap-2 border-2 border-black bg-[#08080c] px-3 py-2.5 shadow-[4px_4px_0_#a3ff12]">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <MessageSquare className="h-4 w-4 text-[#a3ff12]" />
+                  <span className="font-display text-xs text-[#fff6de] uppercase">
+                    04 COMMS // GOWA
+                  </span>
+                  <MonoBadge tone={(whatsappStats?.connectedCount ?? 0) > 0 ? 'ok' : 'neutral'}>
+                    {whatsappStats?.connectedCount ?? 0}/{whatsappStats?.devicesCount ?? 0} LINKED
+                  </MonoBadge>
+                </div>
+                <div className="mt-1 font-mono text-[10px] font-bold text-[#a6a2b8]">
+                  {formatCompactNumber(whatsappStats?.chatsCount ?? 0)} CHATS ·{' '}
+                  {formatCompactNumber(whatsappStats?.messagesCount ?? 0)} MSGS ·{' '}
+                  {(whatsappStats?.engine || 'gowa').toUpperCase()}
+                </div>
               </div>
-              <div className="mt-1 truncate text-[#f3efe4]">{hubStats?.dataDir ?? 'Connecting...'}</div>
+              <button
+                type="button"
+                onClick={onOpenWhatsApp}
+                className="riot-btn inline-flex shrink-0 items-center gap-1 bg-[#a3ff12] px-3 py-1.5 font-mono text-[11px] font-extrabold text-[#08080c]"
+              >
+                JACK IN
+                <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <div className="border-2 border-black bg-[#08080c] px-3 py-2 font-mono text-[11px] text-[#a6a2b8]">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-[#fff6de]">DATA VAULT DIR</span>
+                <MonoBadge tone="ok">ONLINE</MonoBadge>
+              </div>
+              <div className="mt-1 truncate text-[#00f0ff]">
+                {hubStats?.dataDir ?? 'Connecting...'}
+              </div>
             </div>
           </div>
         </SectionCard>

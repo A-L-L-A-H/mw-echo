@@ -1,48 +1,188 @@
 @import "tailwindcss";
 
 @theme {
-  --color-paper-dark: #0d0d10;
-  --color-surface: #15151a;
-  --color-surface-raised: #1c1c23;
-  --color-surface-edge: #2a2a36;
-  --color-ink-primary: #f3efe4;
-  --color-ink-muted: #9c988c;
-  --color-electric-yellow: #ffe031;
-  --color-signal-magenta: #ff2e88;
-  --color-signal-cyan: #00b8f0;
-  --color-status-ok: #22c55e;
-  --color-status-err: #ef4444;
-  --font-mono: ui-monospace, "JetBrains Mono", "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
+  --color-ink-void: #08080c;
+  --color-halftone-dark: #13131d;
+  --color-halftone-raised: #1b1b2b;
+  --color-ink-edge: #2f2f46;
+  --color-comic-cream: #fff6de;
+  --color-ink-muted: #a6a2b8;
+  --color-riot-yellow: #ffe031;
+  --color-chaos-magenta: #ff2e88;
+  --color-arcade-cyan: #00f0ff;
+  --color-toxic-lime: #a3ff12;
+  --color-riot-crimson: #ff334b;
+  --font-display: "Archivo Black", Impact, "Arial Black", sans-serif;
+  --font-comic: "Bangers", "Archivo Black", Impact, cursive;
+  --font-sans: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+}
+
+@keyframes riot-rec-blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes riot-scan-sweep {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(400%);
+  }
 }
 
 @layer base {
   * {
-    border-color: var(--color-surface-edge);
+    border-color: #000000;
   }
 
   html,
   body,
   #root {
     min-height: 100%;
-    background-color: var(--color-paper-dark);
-    color: var(--color-ink-primary);
+    background-color: #08080c;
+    color: #fff6de;
+    font-family: var(--font-sans);
   }
 
   ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
   }
 
   ::-webkit-scrollbar-track {
-    background: #0d0d10;
+    background: #08080c;
+    border-left: 2px solid #000;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #2a2a36;
-    border-radius: 4px;
+    background: #ffe031;
+    border: 2px solid #000;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #3d3d4f;
+    background: #ff2e88;
   }
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-comic {
+  font-family: var(--font-comic);
+  letter-spacing: 0.06em;
+}
+
+.riot-canvas {
+  background-color: #08080c;
+  background-image:
+    radial-gradient(rgba(255, 224, 49, 0.09) 1.3px, transparent 1.3px),
+    radial-gradient(rgba(255, 46, 136, 0.07) 1.3px, transparent 1.3px),
+    linear-gradient(125deg, rgba(0, 240, 255, 0.04) 0%, transparent 38%, rgba(255, 46, 136, 0.05) 100%);
+  background-size: 20px 20px, 20px 20px, 100% 100%;
+  background-position: 0 0, 10px 10px, 0 0;
+}
+
+.riot-scanlines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.025) 0px,
+    rgba(255, 255, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
+
+.riot-hazard-tape {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    #ffe031 0px,
+    #ffe031 12px,
+    #08080c 12px,
+    #08080c 24px
+  );
+}
+
+.riot-hazard-magenta {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    #ff2e88 0px,
+    #ff2e88 10px,
+    #08080c 10px,
+    #08080c 20px
+  );
+}
+
+.riot-halftone-corner {
+  background-image: radial-gradient(rgba(255, 224, 49, 0.16) 1.5px, transparent 1.5px);
+  background-size: 8px 8px;
+}
+
+.riot-title-rgb {
+  text-shadow:
+    3px 3px 0 #ff2e88,
+    -2px -2px 0 #00f0ff;
+}
+
+.riot-title-ink {
+  text-shadow: 3px 3px 0 #000000;
+}
+
+.riot-panel {
+  background-color: #13131d;
+  border: 2.5px solid #000000;
+  box-shadow: 6px 6px 0 #000000;
+}
+
+.riot-xp-stripe {
+  background-image: repeating-linear-gradient(
+    -55deg,
+    rgba(255, 255, 255, 0.22) 0px,
+    rgba(255, 255, 255, 0.22) 8px,
+    transparent 8px,
+    transparent 16px
+  );
+}
+
+.riot-btn {
+  border: 2.5px solid #000000;
+  box-shadow: 4px 4px 0 #000000;
+  transition: transform 90ms ease, box-shadow 90ms ease, background-color 120ms ease;
+}
+
+.riot-btn:hover:not(:disabled) {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 #000000;
+}
+
+.riot-btn:active:not(:disabled) {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 #000000;
+}
+
+.riot-input {
+  background-color: #08080c;
+  color: #fff6de;
+  border: 2px solid #353552;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.riot-input:focus {
+  outline: none;
+  border-color: #ffe031;
+  box-shadow: 3px 3px 0 #ffe031;
+}
+
+.riot-rec-dot {
+  animation: riot-rec-blink 1.1s steps(2, start) infinite;
+}
+
+.riot-qr-sweep {
+  animation: riot-scan-sweep 2.6s linear infinite;
 }
