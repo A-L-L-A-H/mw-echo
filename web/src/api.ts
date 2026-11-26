@@ -816,6 +816,203 @@ export interface RadarFeedbackInput {
   reason: string;
 }
 
+// --- World Radar v2 (Knowledge Graph & Discovery Proposals) ---
+
+export interface RadarGraphNode {
+  id: string;
+  kind: string;
+  label: string;
+  domain: string;
+  reviewState: string;
+  weight: number;
+}
+
+export interface RadarGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  predicate: string;
+  confidence: number;
+  evidenceArtifactId: string;
+}
+
+export interface RadarEntityGraph {
+  nodes: RadarGraphNode[];
+  edges: RadarGraphEdge[];
+}
+
+export type RadarProposalStatus = 'pending' | 'approved' | 'rejected' | string;
+
+export interface RadarDiscoveryProposal {
+  id: string;
+  instanceId: string;
+  targetType: string;
+  canonicalName: string;
+  connectorId: string;
+  sourceUri: string;
+  independenceGroup: string;
+  reason: string;
+  status: RadarProposalStatus;
+  decisionReason: string;
+  createdAt: string;
+  decidedAt: string;
+}
+
+export interface RadarProposalsResponse {
+  proposals: RadarDiscoveryProposal[];
+  count: number;
+}
+
+export interface RadarProposalCreateInput {
+  instanceId: string;
+  targetType: string;
+  canonicalName: string;
+  connectorId: string;
+  sourceUri: string;
+  independenceGroup?: string;
+  reason?: string;
+}
+
+// --- Omnichannel Comms Hub (Telegram & Discord) ---
+
+export type CommsChannelKind = 'telegram' | 'discord' | string;
+
+export interface CommsChannelRecord {
+  id: string;
+  kind: CommsChannelKind;
+  name: string;
+  secretHint: string;
+  secretConfigured: boolean;
+  targetRef: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CommsChannelsListResponse {
+  channels: CommsChannelRecord[];
+  count: number;
+}
+
+export interface CommsChannelUpsertInput {
+  id?: string;
+  kind: CommsChannelKind;
+  name: string;
+  secret?: string;
+  targetRef?: string;
+  enabled?: boolean;
+}
+
+export interface CommsSendInput {
+  channelId?: string;
+  kind?: CommsChannelKind;
+  targetRef?: string;
+  title: string;
+  body: string;
+  priorityTier?: string;
+}
+
+export interface CommsBroadcastInput {
+  title: string;
+  body: string;
+  priorityTier?: string;
+}
+
+export interface CommsDeliveryRecord {
+  id: string;
+  channelId: string;
+  kind: CommsChannelKind;
+  targetRef: string;
+  title: string;
+  body: string;
+  status: string;
+  errorMsg: string;
+  createdAt: string;
+}
+
+export interface CommsDeliveriesResponse {
+  deliveries: CommsDeliveryRecord[];
+  count: number;
+}
+
+// --- VaultEnv Encrypted .env & Secret Sync (15 SECRETS) ---
+
+export type VaultEnvName = 'dev' | 'staging' | 'prod' | 'shared' | string;
+
+export interface VaultSecretKeyMeta {
+  id: string;
+  project: string;
+  envName: string;
+  keyName: string;
+  maskedPreview: string;
+  note: string;
+  updatedAt: string;
+}
+
+export interface VaultKeysListResponse {
+  keys: VaultSecretKeyMeta[];
+  count: number;
+}
+
+export interface VaultSetSecretInput {
+  project: string;
+  envName: string;
+  keyName: string;
+  value: string;
+  note?: string;
+}
+
+export interface VaultBulkImportInput {
+  project: string;
+  envName: string;
+  rawDotEnv: string;
+}
+
+export interface VaultBulkImportResponse {
+  importedCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  keys: VaultSecretKeyMeta[];
+}
+
+export interface VaultRevealResult {
+  project: string;
+  envName: string;
+  keyName: string;
+  value: string;
+  note: string;
+  updatedAt: string;
+}
+
+export interface VaultExportResult {
+  project: string;
+  envName: string;
+  dotenv: string;
+  keyCount: number;
+}
+
+export interface VaultAuditLogRecord {
+  id: string;
+  action: string;
+  project: string;
+  envName: string;
+  keyName: string;
+  detail: string;
+  createdAt: string;
+}
+
+export interface VaultAuditLogsResponse {
+  logs: VaultAuditLogRecord[];
+  count: number;
+}
+
+export interface VaultBackupSnapshotResult {
+  objectId: string;
+  logicalPath: string;
+  keyCount: number;
+  encryptedBytes: number;
+}
+
 // --- Flows Automation Engine (13 FLOWS) ---
 
 export type FlowTriggerKind = 'manual' | 'interval' | 'radar_event' | 'whatsapp_msg' | string;
@@ -2311,5 +2508,396 @@ export async function sniffBlueprintsCatalogs(): Promise<BlueprintsSniffResponse
   return {
     results,
     totalBlueprints: pickNumber(rec, ['totalBlueprints', 'total_blueprints'], 0),
+  };
+}
+
+// --- World Radar v2 (Entity Knowledge Graph & Discovery Proposals) ---
+
+function normalizeRadarGraphNode(rawNode: unknown): RadarGraphNode {
+  const rec = asRecord(rawNode);
+  return {
+    id: pickString(rec, ['id']),
+    kind: pickString(rec, ['kind'], 'entity'),
+    label: pickString(rec, ['label', 'canonicalName', 'name'], 'node'),
+    domain: pickString(rec, ['domain', 'primaryDomain'], 'D01'),
+    reviewState: pickString(rec, ['reviewState', 'review_state'], 'unreviewed'),
+    weight: pickNumber(rec, ['weight'], 1),
+  };
+}
+
+function normalizeRadarGraphEdge(rawEdge: unknown, index: number): RadarGraphEdge {
+  const rec = asRecord(rawEdge);
+  return {
+    id: pickString(rec, ['id'], `edge-${index}`),
+    source: pickString(rec, ['source', 'from', 'sourceId']),
+    target: pickString(rec, ['target', 'to', 'targetId']),
+    predicate: pickString(rec, ['predicate', 'relation', 'kind'], 'linked'),
+    confidence: pickNumber(rec, ['confidence'], 0.5),
+    evidenceArtifactId: pickString(rec, ['evidenceArtifactId', 'evidence_artifact_id']),
+  };
+}
+
+function normalizeRadarProposal(rawProposal: unknown): RadarDiscoveryProposal {
+  const rec = asRecord(rawProposal);
+  return {
+    id: pickString(rec, ['id']),
+    instanceId: pickString(rec, ['instanceId', 'instance_id']),
+    targetType: pickString(rec, ['targetType', 'target_type'], 'feed'),
+    canonicalName: pickString(rec, ['canonicalName', 'canonical_name']),
+    connectorId: pickString(rec, ['connectorId', 'connector_id'], 'rss'),
+    sourceUri: pickString(rec, ['sourceUri', 'source_uri']),
+    independenceGroup: pickString(rec, ['independenceGroup', 'independence_group']),
+    reason: pickString(rec, ['reason']),
+    status: pickString(rec, ['status'], 'pending'),
+    decisionReason: pickString(rec, ['decisionReason', 'decision_reason']),
+    createdAt: pickString(rec, ['createdAt', 'created_at']),
+    decidedAt: pickString(rec, ['decidedAt', 'decided_at']),
+  };
+}
+
+export async function fetchRadarGraph(limit = 80): Promise<RadarEntityGraph> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const rawReply = await requestJson<unknown>(`/api/radar/graph?${params.toString()}`);
+  const rec = asRecord(rawReply);
+  const rawNodes = Array.isArray(rec.nodes) ? rec.nodes : [];
+  const rawEdges = Array.isArray(rec.edges) ? rec.edges : [];
+  return {
+    nodes: rawNodes.map(normalizeRadarGraphNode),
+    edges: rawEdges.map((edgeObj, idx) => normalizeRadarGraphEdge(edgeObj, idx)),
+  };
+}
+
+export async function fetchRadarProposals(
+  instanceId = '',
+  status = '',
+): Promise<RadarProposalsResponse> {
+  const params = new URLSearchParams();
+  if (instanceId.trim()) params.set('instanceId', instanceId.trim());
+  if (status.trim()) params.set('status', status.trim());
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  const rawReply = await requestJson<unknown>(`/api/radar/proposals${suffix}`);
+  const rec = asRecord(rawReply);
+  const rawList = Array.isArray(rec.proposals)
+    ? rec.proposals
+    : Array.isArray(rawReply)
+      ? rawReply
+      : [];
+  const proposals = rawList.map(normalizeRadarProposal);
+  return {
+    proposals,
+    count: pickNumber(rec, ['count'], proposals.length),
+  };
+}
+
+export async function createRadarProposal(
+  payload: RadarProposalCreateInput,
+): Promise<RadarDiscoveryProposal> {
+  const rawReply = await requestJson<unknown>('/api/radar/proposals', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return normalizeRadarProposal(rawReply);
+}
+
+export async function approveRadarProposal(proposalId: string): Promise<RadarDiscoveryProposal> {
+  const rawReply = await requestJson<unknown>(
+    `/api/radar/proposals/${encodeURIComponent(proposalId)}/approve`,
+    {
+      method: 'POST',
+    },
+  );
+  return normalizeRadarProposal(rawReply);
+}
+
+export async function rejectRadarProposal(
+  proposalId: string,
+  reason = '',
+): Promise<RadarDiscoveryProposal> {
+  const rawReply = await requestJson<unknown>(
+    `/api/radar/proposals/${encodeURIComponent(proposalId)}/reject`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    },
+  );
+  return normalizeRadarProposal(rawReply);
+}
+
+// --- Omnichannel Comms Hub (Telegram & Discord) ---
+
+function normalizeCommsChannel(rawChannel: unknown): CommsChannelRecord {
+  const rec = asRecord(rawChannel);
+  return {
+    id: pickString(rec, ['id']),
+    kind: pickString(rec, ['kind'], 'telegram'),
+    name: pickString(rec, ['name']),
+    secretHint: pickString(rec, ['secretHint', 'secret_hint']),
+    secretConfigured: pickBoolean(rec, ['secretConfigured', 'secret_configured'], false),
+    targetRef: pickString(rec, ['targetRef', 'target_ref']),
+    enabled: pickBoolean(rec, ['enabled'], true),
+    createdAt: pickString(rec, ['createdAt', 'created_at']),
+    updatedAt: pickString(rec, ['updatedAt', 'updated_at']),
+  };
+}
+
+function normalizeCommsDelivery(rawDelivery: unknown): CommsDeliveryRecord {
+  const rec = asRecord(rawDelivery);
+  return {
+    id: pickString(rec, ['id']),
+    channelId: pickString(rec, ['channelId', 'channel_id']),
+    kind: pickString(rec, ['kind'], 'telegram'),
+    targetRef: pickString(rec, ['targetRef', 'target_ref']),
+    title: pickString(rec, ['title']),
+    body: pickString(rec, ['body']),
+    status: pickString(rec, ['status'], 'ok'),
+    errorMsg: pickString(rec, ['errorMsg', 'error_msg']),
+    createdAt: pickString(rec, ['createdAt', 'created_at']),
+  };
+}
+
+export async function fetchCommsChannels(): Promise<CommsChannelsListResponse> {
+  const rawReply = await requestJson<unknown>('/api/comms/channels');
+  const rec = asRecord(rawReply);
+  const rawList = Array.isArray(rec.channels)
+    ? rec.channels
+    : Array.isArray(rawReply)
+      ? rawReply
+      : [];
+  const channels = rawList.map(normalizeCommsChannel);
+  return {
+    channels,
+    count: pickNumber(rec, ['count'], channels.length),
+  };
+}
+
+export async function upsertCommsChannel(
+  payload: CommsChannelUpsertInput,
+): Promise<CommsChannelRecord> {
+  const rawReply = await requestJson<unknown>('/api/comms/channels', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return normalizeCommsChannel(rawReply);
+}
+
+export function deleteCommsChannel(channelId: string): Promise<{ deleted: boolean }> {
+  return requestJson<{ deleted: boolean }>(
+    `/api/comms/channels/${encodeURIComponent(channelId)}`,
+    {
+      method: 'DELETE',
+    },
+  );
+}
+
+export async function sendCommsMessage(payload: CommsSendInput): Promise<CommsDeliveryRecord> {
+  const rawReply = await requestJson<unknown>('/api/comms/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return normalizeCommsDelivery(rawReply);
+}
+
+export async function broadcastCommsMessage(
+  payload: CommsBroadcastInput,
+): Promise<CommsDeliveriesResponse> {
+  const rawReply = await requestJson<unknown>('/api/comms/broadcast', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const rec = asRecord(rawReply);
+  const rawList = Array.isArray(rec.deliveries)
+    ? rec.deliveries
+    : Array.isArray(rawReply)
+      ? rawReply
+      : [];
+  const deliveries = rawList.map(normalizeCommsDelivery);
+  return {
+    deliveries,
+    count: pickNumber(rec, ['count'], deliveries.length),
+  };
+}
+
+export async function fetchCommsDeliveries(limit = 50): Promise<CommsDeliveriesResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const rawReply = await requestJson<unknown>(`/api/comms/deliveries?${params.toString()}`);
+  const rec = asRecord(rawReply);
+  const rawList = Array.isArray(rec.deliveries)
+    ? rec.deliveries
+    : Array.isArray(rawReply)
+      ? rawReply
+      : [];
+  const deliveries = rawList.map(normalizeCommsDelivery);
+  return {
+    deliveries,
+    count: pickNumber(rec, ['count'], deliveries.length),
+  };
+}
+
+// --- VaultEnv Encrypted .env & Secret Sync (15 SECRETS) ---
+
+function normalizeVaultSecretKey(rawKey: unknown): VaultSecretKeyMeta {
+  const rec = asRecord(rawKey);
+  return {
+    id: pickString(rec, ['id']),
+    project: pickString(rec, ['project']),
+    envName: pickString(rec, ['envName', 'env_name'], 'dev'),
+    keyName: pickString(rec, ['keyName', 'key_name']),
+    maskedPreview: pickString(rec, ['maskedPreview', 'masked_preview'], '••••••••'),
+    note: pickString(rec, ['note']),
+    updatedAt: pickString(rec, ['updatedAt', 'updated_at']),
+  };
+}
+
+function normalizeVaultAuditLog(rawLog: unknown): VaultAuditLogRecord {
+  const rec = asRecord(rawLog);
+  return {
+    id: pickString(rec, ['id']),
+    action: pickString(rec, ['action']),
+    project: pickString(rec, ['project']),
+    envName: pickString(rec, ['envName', 'env_name']),
+    keyName: pickString(rec, ['keyName', 'key_name']),
+    detail: pickString(rec, ['detail']),
+    createdAt: pickString(rec, ['createdAt', 'created_at']),
+  };
+}
+
+export async function fetchVaultEnvKeys(
+  project: string,
+  envName: string,
+): Promise<VaultKeysListResponse> {
+  const params = new URLSearchParams({
+    project: project.trim() || 'moonwitness',
+    env: envName.trim() || 'dev',
+  });
+  const rawReply = await requestJson<unknown>(`/api/vaultenv/keys?${params.toString()}`);
+  const rec = asRecord(rawReply);
+  const rawList = Array.isArray(rec.keys) ? rec.keys : Array.isArray(rawReply) ? rawReply : [];
+  const keys = rawList.map(normalizeVaultSecretKey);
+  return {
+    keys,
+    count: pickNumber(rec, ['count'], keys.length),
+  };
+}
+
+export async function putVaultEnvSecret(
+  payload: VaultSetSecretInput,
+): Promise<VaultSecretKeyMeta> {
+  const rawReply = await requestJson<unknown>('/api/vaultenv/secret', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return normalizeVaultSecretKey(rawReply);
+}
+
+export async function importVaultEnvDotEnv(
+  payload: VaultBulkImportInput,
+): Promise<VaultBulkImportResponse> {
+  const rawReply = await requestJson<unknown>('/api/vaultenv/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const rec = asRecord(rawReply);
+  const rawKeys = Array.isArray(rec.keys) ? rec.keys : [];
+  const keys = rawKeys.map(normalizeVaultSecretKey);
+  return {
+    importedCount: pickNumber(rec, ['importedCount', 'imported', 'imported_count'], keys.length),
+    updatedCount: pickNumber(rec, ['updatedCount', 'updated', 'updated_count'], 0),
+    skippedCount: pickNumber(rec, ['skippedCount', 'skipped', 'skipped_count'], 0),
+    keys,
+  };
+}
+
+export async function revealVaultEnvSecret(payload: {
+  project: string;
+  envName: string;
+  keyName: string;
+}): Promise<VaultRevealResult> {
+  const rawReply = await requestJson<unknown>('/api/vaultenv/reveal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const rec = asRecord(rawReply);
+  return {
+    project: pickString(rec, ['project'], payload.project),
+    envName: pickString(rec, ['envName', 'env_name'], payload.envName),
+    keyName: pickString(rec, ['keyName', 'key_name'], payload.keyName),
+    value: pickString(rec, ['value']),
+    note: pickString(rec, ['note']),
+    updatedAt: pickString(rec, ['updatedAt', 'updated_at']),
+  };
+}
+
+export async function exportVaultEnvDotEnv(
+  project: string,
+  envName: string,
+): Promise<VaultExportResult> {
+  const params = new URLSearchParams({
+    project: project.trim() || 'moonwitness',
+    env: envName.trim() || 'dev',
+  });
+  const rawReply = await requestJson<unknown>(`/api/vaultenv/export?${params.toString()}`);
+  const rec = asRecord(rawReply);
+  return {
+    project: pickString(rec, ['project'], project),
+    envName: pickString(rec, ['envName', 'env_name'], envName),
+    dotenv: pickString(rec, ['dotenv', 'rawDotEnv', 'content']),
+    keyCount: pickNumber(rec, ['keyCount', 'key_count', 'count'], 0),
+  };
+}
+
+export function deleteVaultEnvSecret(
+  project: string,
+  envName: string,
+  keyName: string,
+): Promise<{ deleted: boolean }> {
+  const params = new URLSearchParams({
+    project: project.trim() || 'moonwitness',
+    env: envName.trim() || 'dev',
+    key: keyName.trim(),
+  });
+  return requestJson<{ deleted: boolean }>(`/api/vaultenv/secret?${params.toString()}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function fetchVaultEnvAudit(
+  project = '',
+  limit = 50,
+): Promise<VaultAuditLogsResponse> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (project.trim()) params.set('project', project.trim());
+  const rawReply = await requestJson<unknown>(`/api/vaultenv/audit?${params.toString()}`);
+  const rec = asRecord(rawReply);
+  const rawList = Array.isArray(rec.logs) ? rec.logs : Array.isArray(rawReply) ? rawReply : [];
+  const logs = rawList.map(normalizeVaultAuditLog);
+  return {
+    logs,
+    count: pickNumber(rec, ['count'], logs.length),
+  };
+}
+
+export async function backupVaultEnvToPool(
+  project: string,
+  envName: string,
+): Promise<VaultBackupSnapshotResult> {
+  const rawReply = await requestJson<unknown>('/api/vaultenv/backup', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project: project.trim() || 'moonwitness', envName }),
+  });
+  const rec = asRecord(rawReply);
+  return {
+    objectId: pickString(rec, ['objectId', 'object_id']),
+    logicalPath: pickString(rec, ['logicalPath', 'logical_path']),
+    keyCount: pickNumber(rec, ['keyCount', 'key_count'], 0),
+    encryptedBytes: pickNumber(rec, ['encryptedBytes', 'encrypted_bytes'], 0),
   };
 }

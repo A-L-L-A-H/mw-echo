@@ -590,3 +590,56 @@ func TestFlowsBlueprintsAndExpandedMCPRoutes(t *testing.T) {
 		t.Fatalf("MCP echo_run_flow failed: %d %s", mcpFlowRec.Code, mcpFlowRec.Body.String())
 	}
 }
+
+func TestWaveD2RoutesAndMCPTools(t *testing.T) {
+	_, handler := setupTestEcho(t, "")
+
+	for _, endpoint := range []string{
+		"/api/comms/channels",
+		"/api/vaultenv/keys",
+		"/api/desktop/status",
+		"/api/desktop/doctor",
+		"/api/mesh/nodes",
+	} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, endpoint, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s expected 200, got %d: %s", endpoint, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Store a secret in VaultEnv and verify echo_env_keys never leaks plaintext
+	setSecretReq := httptest.NewRequest(http.MethodPut, "/api/vaultenv/secret", strings.NewReader(`{"project":"alpha","envName":"dev","keyName":"API_KEY","value":"super-secret-plaintext-999"}`))
+	setSecretReq.Header.Set("Content-Type", "application/json")
+	setSecretRec := httptest.NewRecorder()
+	handler.ServeHTTP(setSecretRec, setSecretReq)
+	if setSecretRec.Code != http.StatusOK {
+		t.Fatalf("PUT /api/vaultenv/secret expected 200, got %d: %s", setSecretRec.Code, setSecretRec.Body.String())
+	}
+
+	mcpListReq := httptest.NewRequest(http.MethodPost, "/api/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":20,"method":"tools/list"}`))
+	mcpListReq.Header.Set("Content-Type", "application/json")
+	mcpListRec := httptest.NewRecorder()
+	handler.ServeHTTP(mcpListRec, mcpListReq)
+	for _, toolName := range []string{"echo_comms_send", "echo_env_keys", "echo_desktop_doctor", "echo_local_ai_discover"} {
+		if !strings.Contains(mcpListRec.Body.String(), toolName) {
+			t.Fatalf("MCP tools/list missing %s: %s", toolName, mcpListRec.Body.String())
+		}
+	}
+
+	mcpEnvReq := httptest.NewRequest(http.MethodPost, "/api/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"echo_env_keys","arguments":{"project":"alpha","env":"dev"}}}`))
+	mcpEnvReq.Header.Set("Content-Type", "application/json")
+	mcpEnvRec := httptest.NewRecorder()
+	handler.ServeHTTP(mcpEnvRec, mcpEnvReq)
+	if mcpEnvRec.Code != http.StatusOK || !strings.Contains(mcpEnvRec.Body.String(), "API_KEY") || strings.Contains(mcpEnvRec.Body.String(), "super-secret-plaintext-999") {
+		t.Fatalf("MCP echo_env_keys failed or leaked plaintext: %d %s", mcpEnvRec.Code, mcpEnvRec.Body.String())
+	}
+
+	mcpDocReq := httptest.NewRequest(http.MethodPost, "/api/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":22,"method":"tools/call","params":{"name":"echo_desktop_doctor","arguments":{}}}`))
+	mcpDocReq.Header.Set("Content-Type", "application/json")
+	mcpDocRec := httptest.NewRecorder()
+	handler.ServeHTTP(mcpDocRec, mcpDocReq)
+	if mcpDocRec.Code != http.StatusOK || !strings.Contains(mcpDocRec.Body.String(), "sqlite_integrity") {
+		t.Fatalf("MCP echo_desktop_doctor failed: %d %s", mcpDocRec.Code, mcpDocRec.Body.String())
+	}
+}

@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/A-L-L-A-H/mw-echo/internal/store"
@@ -44,6 +45,14 @@ type Engine struct {
 	httpClient    *http.Client
 	githubAPIBase string
 	connectors    *ConnectorRegistry
+
+	schedMu      sync.Mutex
+	schedCtx     context.Context
+	schedCancel  context.CancelFunc
+	schedWG      sync.WaitGroup
+	schedStarted bool
+	closed       bool
+	closeOnce    sync.Once
 }
 
 // RadarInstance represents a configured radar monitoring instance.
@@ -303,13 +312,18 @@ func NewEngine(hub *store.HubStore, opts Options) (*Engine, error) {
 	if githubBase == "" {
 		githubBase = "https://api.github.com"
 	}
-	return &Engine{
+	schedCtx, schedCancel := context.WithCancel(context.Background())
+	eng := &Engine{
 		hub:           hub,
 		gatewayURL:    strings.TrimSpace(opts.GatewayURL),
 		httpClient:    client,
 		githubAPIBase: githubBase,
 		connectors:    NewConnectorRegistry(),
-	}, nil
+		schedCtx:      schedCtx,
+		schedCancel:   schedCancel,
+	}
+	hub.RegisterCloser(eng.Close)
+	return eng, nil
 }
 
 // InstallPack validates an Alpha Radar Pack and creates an active RadarInstance.
@@ -1901,10 +1915,18 @@ func scorePriorityAxes(rec CollectedRecord, evidenceCount, independentSources in
 	}
 
 	if rec.ImpactHint > 0 {
-		impact = clampScore(rec.ImpactHint)
+		val := rec.ImpactHint
+		if val <= 1.0 {
+			val *= 100
+		}
+		impact = clampScore(val)
 	}
 	if rec.UrgencyHint > 0 {
-		urgency = clampScore(rec.UrgencyHint)
+		val := rec.UrgencyHint
+		if val <= 1.0 {
+			val *= 100
+		}
+		urgency = clampScore(val)
 	}
 	return impact, urgency, relevance, velocity, novelty, actionability, exposure
 }

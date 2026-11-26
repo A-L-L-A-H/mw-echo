@@ -218,6 +218,23 @@ CREATE TABLE IF NOT EXISTS radar_audit_logs (
   outcome TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS radar_discovery_proposals (
+  id TEXT PRIMARY KEY,
+  instance_id TEXT NOT NULL,
+  target_type TEXT NOT NULL DEFAULT 'feed',
+  canonical_name TEXT NOT NULL,
+  connector_id TEXT NOT NULL,
+  source_uri TEXT NOT NULL,
+  independence_group TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+  decision_reason TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  decided_at TEXT NOT NULL DEFAULT '',
+  UNIQUE(instance_id, source_uri)
+);
+CREATE INDEX IF NOT EXISTS idx_radar_proposals_status ON radar_discovery_proposals(status, created_at DESC);
 `
 
 // MigrateSchema creates all normalized evidence-first World Radar Network tables inside hub.DB().

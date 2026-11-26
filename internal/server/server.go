@@ -21,12 +21,16 @@ import (
 	"github.com/A-L-L-A-H/mw-echo/internal/assistant"
 	"github.com/A-L-L-A-H/mw-echo/internal/blueprints"
 	"github.com/A-L-L-A-H/mw-echo/internal/codingagent"
+	"github.com/A-L-L-A-H/mw-echo/internal/comms"
+	"github.com/A-L-L-A-H/mw-echo/internal/desktop"
 	"github.com/A-L-L-A-H/mw-echo/internal/flows"
 	"github.com/A-L-L-A-H/mw-echo/internal/gamification"
 	"github.com/A-L-L-A-H/mw-echo/internal/importer"
+	"github.com/A-L-L-A-H/mw-echo/internal/meshfleet"
 	"github.com/A-L-L-A-H/mw-echo/internal/observatory"
 	"github.com/A-L-L-A-H/mw-echo/internal/storage"
 	"github.com/A-L-L-A-H/mw-echo/internal/store"
+	"github.com/A-L-L-A-H/mw-echo/internal/vaultenv"
 	"github.com/A-L-L-A-H/mw-echo/internal/whatsapp"
 	"github.com/A-L-L-A-H/mw-echo/internal/worldradar"
 	"github.com/labstack/echo/v4"
@@ -273,6 +277,37 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	if err != nil {
 		panic("init world radar: " + err.Error())
 	}
+	worldRadar.StartScheduler(5 * time.Minute)
+
+	commsMgr, err := comms.NewManager(hub, comms.Options{})
+	if err != nil {
+		panic("init comms manager: " + err.Error())
+	}
+
+	vaultEnv, err := vaultenv.NewVault(hub, vaultenv.Options{
+		UploadBackup: func(ctx context.Context, project, logicalPath, filename, mimeType string, content []byte) (string, error) {
+			savedObj, upErr := pool.Upload(ctx, project, logicalPath, filepath.Base(filename), mimeType, "", bytes.NewReader(content))
+			if upErr != nil {
+				return "", upErr
+			}
+			return savedObj.ID, nil
+		},
+	})
+	if err != nil {
+		panic("init vaultenv: " + err.Error())
+	}
+
+	desktopMgr, err := desktop.NewManager(hub, desktop.Options{
+		KnownSecrets: []string{cfg.AuthToken, cfg.WAPass, cfg.WAWebhookSecret},
+	})
+	if err != nil {
+		panic("init desktop manager: " + err.Error())
+	}
+
+	meshMgr, err := meshfleet.NewManager(hub, meshfleet.Options{})
+	if err != nil {
+		panic("init mesh fleet manager: " + err.Error())
+	}
 
 	flowEngine, err = flows.NewEngine(hub, flows.Options{
 		HTTPClient: internalClient,
@@ -324,6 +359,20 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 				return "", sendErr
 			}
 			return sent.MessageID, nil
+		},
+		SendComms: func(ctx context.Context, kind, channelID, targetRef, title, body, priorityTier string) (string, error) {
+			delivery, sendErr := commsMgr.Send(ctx, comms.SendInput{
+				ChannelID:    channelID,
+				Kind:         kind,
+				TargetRef:    targetRef,
+				Title:        title,
+				Body:         body,
+				PriorityTier: priorityTier,
+			})
+			if sendErr != nil {
+				return "", sendErr
+			}
+			return delivery.ID, nil
 		},
 		Backup9Drive: func(ctx context.Context) (string, error) {
 			backups, backupErr := pool.BackupDatabases(ctx)
@@ -785,7 +834,7 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 
 	// Unified MCP JSON-RPC 2.0 endpoint
 	api.POST("/mcp", func(c echo.Context) error {
-		return handleMCP(c, hub, waMgr, worldRadar, blueprintCat, flowEngine)
+		return handleMCP(c, hub, waMgr, worldRadar, blueprintCat, flowEngine, commsMgr, vaultEnv, desktopMgr)
 	})
 
 	// Trigger matching radar_event flows whenever a World Radar instance run completes via HTTP.
@@ -829,6 +878,18 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 
 	// Self-Hosted PaaS Blueprint Armory (14 PACKS)
 	blueprintCat.RegisterRoutes(api)
+
+	// Omnichannel Comms Hub (Telegram + Discord)
+	commsMgr.RegisterRoutes(api)
+
+	// Encrypted .env & Secret Sync Vault (15 SECRETS)
+	vaultEnv.RegisterRoutes(api)
+
+	// Desktop Host & Diagnostics (16 DESKTOP)
+	desktopMgr.RegisterRoutes(api)
+
+	// Private Mesh Fleet & Git Worktrees
+	meshMgr.RegisterRoutes(api)
 
 	return app
 }
@@ -881,7 +942,17 @@ type mcpRequest struct {
 	Params  json.RawMessage `json:"params"`
 }
 
-func handleMCP(c echo.Context, hub *store.HubStore, waMgr *whatsapp.Manager, worldRadar *worldradar.Engine, blueprintCat *blueprints.Catalog, flowEngine *flows.Engine) error {
+func handleMCP(
+	c echo.Context,
+	hub *store.HubStore,
+	waMgr *whatsapp.Manager,
+	worldRadar *worldradar.Engine,
+	blueprintCat *blueprints.Catalog,
+	flowEngine *flows.Engine,
+	commsMgr *comms.Manager,
+	vaultEnv *vaultenv.Vault,
+	desktopMgr *desktop.Manager,
+) error {
 	var rpc mcpRequest
 	if err := c.Bind(&rpc); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]any{"jsonrpc": "2.0", "id": nil, "error": map[string]any{"code": -32700, "message": "invalid JSON"}})
@@ -918,6 +989,10 @@ func handleMCP(c echo.Context, hub *store.HubStore, waMgr *whatsapp.Manager, wor
 				{"name": "echo_radar_run", "description": "Execute a World Radar monitoring instance collection & assessment cycle.", "inputSchema": map[string]any{"type": "object", "required": []string{"instanceId"}, "properties": map[string]any{"instanceId": map[string]string{"type": "string"}}}},
 				{"name": "echo_search_blueprints", "description": "Search self-hosted PaaS Docker Compose blueprints via FTS5.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"query": map[string]string{"type": "string"}, "source": map[string]string{"type": "string"}, "category": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
 				{"name": "echo_run_flow", "description": "Execute an automation flow by ID with an optional trigger payload.", "inputSchema": map[string]any{"type": "object", "required": []string{"id"}, "properties": map[string]any{"id": map[string]string{"type": "string"}, "triggerPayload": map[string]string{"type": "string"}}}},
+				{"name": "echo_comms_send", "description": "Send an outbound message or alert through a configured Telegram or Discord channel.", "inputSchema": map[string]any{"type": "object", "required": []string{"body"}, "properties": map[string]any{"channelId": map[string]string{"type": "string"}, "kind": map[string]string{"type": "string"}, "targetRef": map[string]string{"type": "string"}, "title": map[string]string{"type": "string"}, "body": map[string]string{"type": "string"}, "priorityTier": map[string]string{"type": "string"}}}},
+				{"name": "echo_env_keys", "description": "List redacted secret key metadata in VaultEnv for a project and environment (never exposes plaintext secret values).", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]string{"type": "string"}, "env": map[string]string{"type": "string"}}}},
+				{"name": "echo_desktop_doctor", "description": "Run MW-ECHO desktop runtime health diagnostics and generate a redacted support report.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+				{"name": "echo_local_ai_discover", "description": "Discover local loopback AI runtimes (Ollama, LM Studio, vLLM) and available models.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 			},
 		})
 	case "tools/call":
@@ -999,6 +1074,25 @@ func handleMCP(c echo.Context, hub *store.HubStore, waMgr *whatsapp.Manager, wor
 				payload = strArg("payload")
 			}
 			out, err = flowEngine.RunFlowByID(ctx, flowID, payload)
+		case "echo_comms_send":
+			out, err = commsMgr.Send(ctx, comms.SendInput{
+				ChannelID:    strArg("channelId"),
+				Kind:         strArg("kind"),
+				TargetRef:    strArg("targetRef"),
+				Title:        strArg("title"),
+				Body:         strArg("body"),
+				PriorityTier: strArg("priorityTier"),
+			})
+		case "echo_env_keys":
+			envName := strArg("env")
+			if envName == "" {
+				envName = strArg("envName")
+			}
+			out, err = vaultEnv.ListKeys(ctx, strArg("project"), envName)
+		case "echo_desktop_doctor":
+			out, err = desktopMgr.RunDoctor(ctx)
+		case "echo_local_ai_discover":
+			out = desktopMgr.DiscoverLocalAI(ctx, nil)
 		default:
 			return fail(-32601, "unknown tool: "+call.Name)
 		}

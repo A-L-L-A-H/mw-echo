@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Bell,
@@ -7,9 +7,11 @@ import {
   Clock,
   ExternalLink,
   FileText,
+  GitBranch,
   Globe2,
   HeartPulse,
   Layers,
+  Network,
   Pause,
   Play,
   Plus,
@@ -25,25 +27,34 @@ import {
 import {
   acknowledgeRadarAlert,
   addRadarTarget,
+  approveRadarProposal,
+  createRadarProposal,
   createRadarReport,
   fetchRadarAlerts,
   fetchRadarDomains,
   fetchRadarEventDetail,
   fetchRadarEvents,
+  fetchRadarGraph,
   fetchRadarInstances,
   fetchRadarLenses,
   fetchRadarPacks,
+  fetchRadarProposals,
   fetchRadarReports,
   fetchRadarSourcesHealth,
   installRadarPack,
   pauseRadarInstance,
+  rejectRadarProposal,
   runRadarInstance,
   submitRadarFeedback,
   type RadarAlertRecord,
   type RadarConnectorHealth,
+  type RadarDiscoveryProposal,
   type RadarDomain,
+  type RadarEntityGraph,
   type RadarEventDetailResponse,
   type RadarEventSummary,
+  type RadarGraphEdge,
+  type RadarGraphNode,
   type RadarInstance,
   type RadarLens,
   type RadarPack,
@@ -85,6 +96,74 @@ function normalizeScorePct(scoreVal: number): number {
   if (scoreVal <= 1) return Math.min(100, Math.round(scoreVal * 100));
   if (scoreVal <= 10) return Math.min(100, Math.round(scoreVal * 10));
   return Math.min(100, Math.round(scoreVal));
+}
+
+interface PositionedGraphNode extends RadarGraphNode {
+  x: number;
+  y: number;
+  radius: number;
+  color: string;
+}
+
+const CONNECTOR_OPTIONS = [
+  { value: 'github', label: 'github (GitHub Releases / Commits)' },
+  { value: 'rss', label: 'rss (RSS 2.0 / Atom Feed)' },
+  { value: 'web_feed', label: 'web_feed (JSON / Web Feed)' },
+  { value: 'arxiv', label: 'arxiv (arXiv Atom Research Feed)' },
+  { value: 'cyber_kev', label: 'cyber_kev (CISA KEV Vulnerability Catalog)' },
+  { value: 'usgs_geo', label: 'usgs_geo (USGS GeoJSON Seismic Feed)' },
+] as const;
+
+function resolveGraphNodeColor(node: RadarGraphNode): string {
+  const kind = (node.kind || '').toLowerCase();
+  if (kind.includes('event') || kind.includes('alert')) return '#ff2e88';
+  if (kind.includes('source') || kind.includes('target')) return '#00f0ff';
+  if (kind.includes('domain')) return '#a3ff12';
+  return '#ffe031';
+}
+
+function resolveProposalTone(status: string): BadgeTone {
+  const lowered = (status || '').toLowerCase();
+  if (lowered === 'approved') return 'ok';
+  if (lowered === 'rejected') return 'err';
+  return 'yellow';
+}
+
+function computeDeterministicConstellation(
+  nodes: RadarGraphNode[],
+): Map<string, PositionedGraphNode> {
+  const layoutMap = new Map<string, PositionedGraphNode>();
+  if (nodes.length === 0) return layoutMap;
+
+  const sorted = [...nodes].sort((left, right) => {
+    const domainCmp = (left.domain || '').localeCompare(right.domain || '');
+    if (domainCmp !== 0) return domainCmp;
+    return left.id.localeCompare(right.id);
+  });
+
+  const width = 760;
+  const height = 420;
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+
+  sorted.forEach((node, idx) => {
+    const ratio = sorted.length === 1 ? 0 : (idx + 0.5) / sorted.length;
+    const radialDist = sorted.length === 1 ? 0 : 48 + Math.sqrt(ratio) * 148;
+    const theta = idx * goldenAngle;
+    const x = Math.round((centerX + Math.cos(theta) * radialDist * 1.45) * 10) / 10;
+    const y = Math.round((centerY + Math.sin(theta) * radialDist * 0.92) * 10) / 10;
+    const clampedWeight = Math.max(1, Math.min(5, node.weight || 1));
+    layoutMap.set(node.id, {
+      ...node,
+      x: Math.max(44, Math.min(width - 44, x)),
+      y: Math.max(36, Math.min(height - 36, y)),
+      radius: 9 + clampedWeight * 2.2,
+      color: resolveGraphNodeColor(node),
+    });
+  });
+
+  return layoutMap;
 }
 
 export function WorldRadarTab({ onNotify }: WorldRadarTabProps) {
@@ -130,6 +209,26 @@ export function WorldRadarTab({ onNotify }: WorldRadarTabProps) {
   const [briefScope, setBriefScope] = useState('24h');
   const [generatingBrief, setGeneratingBrief] = useState(false);
 
+  // World Radar v2: Entity Knowledge Graph & Discovery Proposals
+  const [entityGraph, setEntityGraph] = useState<RadarEntityGraph>({ nodes: [], edges: [] });
+  const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
+  const [hoveredGraphNodeId, setHoveredGraphNodeId] = useState<string | null>(null);
+  const [selectedGraphEdgeId, setSelectedGraphEdgeId] = useState<string | null>(null);
+  const [hoveredGraphEdgeId, setHoveredGraphEdgeId] = useState<string | null>(null);
+
+  const [proposals, setProposals] = useState<RadarDiscoveryProposal[]>([]);
+  const [proposalFilter, setProposalFilter] = useState<string>('all');
+  const [proposalInstanceId, setProposalInstanceId] = useState('');
+  const [proposalConnectorId, setProposalConnectorId] = useState('arxiv');
+  const [proposalTargetType, setProposalTargetType] = useState('feed');
+  const [proposalCanonicalName, setProposalCanonicalName] = useState('');
+  const [proposalSourceUri, setProposalSourceUri] = useState('');
+  const [proposalIndependenceGroup, setProposalIndependenceGroup] = useState('');
+  const [proposalReason, setProposalReason] = useState('');
+  const [submittingProposal, setSubmittingProposal] = useState(false);
+  const [busyProposalId, setBusyProposalId] = useState<string | null>(null);
+  const [rejectReasonById, setRejectReasonById] = useState<Record<string, string>>({});
+
   const loadEventsForDomain = useCallback(async (domainCode: string) => {
     try {
       const reply = await fetchRadarEvents(domainCode, 50);
@@ -155,6 +254,8 @@ export function WorldRadarTab({ onNotify }: WorldRadarTabProps) {
         alertsOutcome,
         reportsOutcome,
         healthOutcome,
+        graphOutcome,
+        proposalsOutcome,
       ] = await Promise.allSettled([
         fetchRadarDomains(),
         fetchRadarLenses(),
@@ -163,6 +264,8 @@ export function WorldRadarTab({ onNotify }: WorldRadarTabProps) {
         fetchRadarAlerts(),
         fetchRadarReports(),
         fetchRadarSourcesHealth(),
+        fetchRadarGraph(80),
+        fetchRadarProposals(),
       ]);
 
       if (domainsOutcome.status === 'fulfilled') {
@@ -179,6 +282,7 @@ export function WorldRadarTab({ onNotify }: WorldRadarTabProps) {
         const instList = instancesOutcome.value.instances ?? [];
         setInstances(instList);
         setBriefInstanceId((prev) => prev || instList[0]?.id || '');
+        setProposalInstanceId((prev) => prev || instList[0]?.id || '');
       }
       if (alertsOutcome.status === 'fulfilled') {
         setAlerts(alertsOutcome.value.alerts ?? []);
@@ -190,6 +294,15 @@ export function WorldRadarTab({ onNotify }: WorldRadarTabProps) {
       }
       if (healthOutcome.status === 'fulfilled') {
         setConnectors(healthOutcome.value.connectors ?? []);
+      }
+      if (graphOutcome.status === 'fulfilled') {
+        setEntityGraph({
+          nodes: graphOutcome.value.nodes ?? [],
+          edges: graphOutcome.value.edges ?? [],
+        });
+      }
+      if (proposalsOutcome.status === 'fulfilled') {
+        setProposals(proposalsOutcome.value.proposals ?? []);
       }
 
       await loadEventsForDomain(selectedDomain);
@@ -354,6 +467,101 @@ export function WorldRadarTab({ onNotify }: WorldRadarTabProps) {
       setGeneratingBrief(false);
     }
   };
+
+  const handleCreateProposal = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    const targetInstId = proposalInstanceId || instances[0]?.id || '';
+    if (!targetInstId) {
+      onNotify('err', 'Install or select a radar instance first.');
+      return;
+    }
+    if (!proposalCanonicalName.trim() || !proposalSourceUri.trim()) {
+      onNotify('err', 'Canonical name and Source URI are required for a proposal.');
+      return;
+    }
+    setSubmittingProposal(true);
+    try {
+      const created = await createRadarProposal({
+        instanceId: targetInstId,
+        targetType: proposalTargetType.trim() || 'feed',
+        canonicalName: proposalCanonicalName.trim(),
+        connectorId: proposalConnectorId.trim() || 'rss',
+        sourceUri: proposalSourceUri.trim(),
+        independenceGroup: proposalIndependenceGroup.trim() || undefined,
+        reason: proposalReason.trim() || undefined,
+      });
+      setProposalCanonicalName('');
+      setProposalSourceUri('');
+      setProposalIndependenceGroup('');
+      setProposalReason('');
+      onNotify(
+        created.status === 'rejected' ? 'info' : 'ok',
+        created.status === 'rejected'
+          ? `Proposal "${created.canonicalName}" remains rejected (${created.decisionReason || 'previously rejected'}).`
+          : `Queued discovery proposal "${created.canonicalName}" (${created.status}).`,
+      );
+      await loadAllRadar();
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error ? caughtError.message : 'Failed to submit proposal';
+      onNotify('err', message);
+    } finally {
+      setSubmittingProposal(false);
+    }
+  };
+
+  const handleApproveProposal = async (proposal: RadarDiscoveryProposal) => {
+    setBusyProposalId(proposal.id);
+    try {
+      await approveRadarProposal(proposal.id);
+      onNotify('ok', `Approved & attached watch target "${proposal.canonicalName}".`);
+      await loadAllRadar();
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error ? caughtError.message : 'Proposal approval failed';
+      onNotify('err', message);
+    } finally {
+      setBusyProposalId(null);
+    }
+  };
+
+  const handleRejectProposal = async (proposal: RadarDiscoveryProposal) => {
+    setBusyProposalId(proposal.id);
+    try {
+      const reasonText = (rejectReasonById[proposal.id] || '').trim() || 'Rejected by analyst';
+      await rejectRadarProposal(proposal.id, reasonText);
+      onNotify('info', `Rejected proposal "${proposal.canonicalName}".`);
+      await loadAllRadar();
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error ? caughtError.message : 'Proposal rejection failed';
+      onNotify('err', message);
+    } finally {
+      setBusyProposalId(null);
+    }
+  };
+
+  const positionedNodesMap = useMemo(
+    () => computeDeterministicConstellation(entityGraph.nodes),
+    [entityGraph.nodes],
+  );
+  const positionedNodes = useMemo(
+    () => Array.from(positionedNodesMap.values()),
+    [positionedNodesMap],
+  );
+  const activeInspectNodeId = hoveredGraphNodeId || selectedGraphNodeId;
+  const activeInspectNode = activeInspectNodeId
+    ? (positionedNodesMap.get(activeInspectNodeId) ?? null)
+    : null;
+  const activeInspectEdgeId = hoveredGraphEdgeId || selectedGraphEdgeId;
+  const activeInspectEdge: RadarGraphEdge | null = activeInspectEdgeId
+    ? (entityGraph.edges.find((edgeObj) => edgeObj.id === activeInspectEdgeId) ?? null)
+    : null;
+
+  const filteredProposals = useMemo(() => {
+    if (proposalFilter === 'all') return proposals;
+    return proposals.filter((prop) => prop.status.toLowerCase() === proposalFilter);
+  }, [proposalFilter, proposals]);
 
   const activeDomainMeta = domains.find((dom) => dom.id === selectedDomain) ?? null;
   const openAlerts = alerts.filter((alert) => alert.status !== 'acknowledged');
@@ -694,15 +902,32 @@ export function WorldRadarTab({ onNotify }: WorldRadarTabProps) {
                                 setCanonicalName('Hacker News Frontpage');
                                 setSourceUri('https://hnrss.org/frontpage');
                                 setIndependenceGroup('ycombinator-rss');
+                              } else if (nextConn === 'arxiv') {
+                                setTargetType('feed');
+                                setCanonicalName('arXiv cs.AI Recent');
+                                setSourceUri('https://export.arxiv.org/api/query?search_query=cat:cs.AI&max_results=10');
+                                setIndependenceGroup('arxiv-cs-ai');
+                              } else if (nextConn === 'cyber_kev') {
+                                setTargetType('feed');
+                                setCanonicalName('CISA Known Exploited Vulnerabilities');
+                                setSourceUri('https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json');
+                                setIndependenceGroup('cisa-kev');
+                              } else if (nextConn === 'usgs_geo') {
+                                setTargetType('feed');
+                                setCanonicalName('USGS M4.5+ Earthquakes (Day)');
+                                setSourceUri('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_day.geojson');
+                                setIndependenceGroup('usgs-seismic');
                               } else {
                                 setTargetType('feed');
                               }
                             }}
                             className="riot-input px-2.5 py-1.5 font-mono text-xs font-bold"
                           >
-                            <option value="github">github (GitHub Releases / Commits)</option>
-                            <option value="rss">rss (RSS 2.0 / Atom Feed)</option>
-                            <option value="web_feed">web_feed (JSON / Web Feed)</option>
+                            {CONNECTOR_OPTIONS.map((connOpt) => (
+                              <option key={connOpt.value} value={connOpt.value}>
+                                {connOpt.label}
+                              </option>
+                            ))}
                           </select>
                           <input
                             type="text"
@@ -1320,6 +1545,515 @@ export function WorldRadarTab({ onNotify }: WorldRadarTabProps) {
                 </div>
               </div>
             ) : null}
+          </div>
+        )}
+      </SectionCard>
+
+      {/* 5. Entity Knowledge Graph Constellation */}
+      <SectionCard
+        title="ENTITY KNOWLEDGE GRAPH"
+        subtitle="Deterministic constellation of tracked entities, events, and evidence-linked relationships (/api/radar/graph)."
+        icon={<Network className="h-4 w-4" />}
+        sticker={`${entityGraph.nodes.length} NODES · ${entityGraph.edges.length} EDGES`}
+        stickerTone="cyan"
+        accent="cyan"
+      >
+        {positionedNodes.length === 0 ? (
+          <div className="border-2 border-dashed border-[#3a3a58] bg-[#08080c] py-10 text-center font-mono text-xs font-bold uppercase text-[#a6a2b8]">
+            NO ENTITY GRAPH NODES YET. RUN A RADAR SCAN TO POPULATE ENTITIES &amp; EDGES.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+            {/* Interactive SVG Constellation */}
+            <div className="relative overflow-hidden border-2 border-black bg-[#08080c] p-2 lg:col-span-8">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1 font-mono text-[10px] font-bold uppercase">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="inline-flex items-center gap-1 text-[#ffe031]">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#ffe031]" />
+                    ENTITY
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[#ff2e88]">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#ff2e88]" />
+                    EVENT
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[#00f0ff]">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#00f0ff]" />
+                    SOURCE
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[#a3ff12]">
+                    <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#a3ff12]" />
+                    DOMAIN
+                  </span>
+                </div>
+                {selectedGraphNodeId || selectedGraphEdgeId ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedGraphNodeId(null);
+                      setSelectedGraphEdgeId(null);
+                    }}
+                    className="text-[#ffe031] underline"
+                  >
+                    CLEAR SELECTION
+                  </button>
+                ) : null}
+              </div>
+
+              <svg
+                viewBox="0 0 760 420"
+                className="h-[360px] w-full border border-[#252538] bg-[#050508]"
+                role="img"
+                aria-label="Entity Knowledge Graph Constellation"
+              >
+                <defs>
+                  <pattern
+                    id="radar-constellation-grid"
+                    width="32"
+                    height="32"
+                    patternUnits="userSpaceOnUse"
+                  >
+                    <path
+                      d="M 32 0 L 0 0 0 32"
+                      fill="none"
+                      stroke="rgba(255,224,49,0.06)"
+                      strokeWidth="1"
+                    />
+                  </pattern>
+                </defs>
+                <rect width="760" height="420" fill="url(#radar-constellation-grid)" />
+
+                {/* Edges */}
+                {entityGraph.edges.map((edgeObj) => {
+                  const srcNode = positionedNodesMap.get(edgeObj.source);
+                  const tgtNode = positionedNodesMap.get(edgeObj.target);
+                  if (!srcNode || !tgtNode) return null;
+                  const isEdgeHighlighted =
+                    activeInspectEdgeId === edgeObj.id ||
+                    activeInspectNodeId === edgeObj.source ||
+                    activeInspectNodeId === edgeObj.target;
+                  const midX = (srcNode.x + tgtNode.x) / 2;
+                  const midY = (srcNode.y + tgtNode.y) / 2;
+
+                  return (
+                    <g
+                      key={edgeObj.id}
+                      className="cursor-pointer"
+                      onMouseEnter={() => setHoveredGraphEdgeId(edgeObj.id)}
+                      onMouseLeave={() => setHoveredGraphEdgeId(null)}
+                      onClick={() => {
+                        setSelectedGraphEdgeId(edgeObj.id);
+                        setSelectedGraphNodeId(null);
+                      }}
+                    >
+                      <line
+                        x1={srcNode.x}
+                        y1={srcNode.y}
+                        x2={tgtNode.x}
+                        y2={tgtNode.y}
+                        stroke={isEdgeHighlighted ? '#ffe031' : '#3a3a58'}
+                        strokeWidth={isEdgeHighlighted ? 2.5 : 1.4}
+                        strokeOpacity={isEdgeHighlighted ? 0.95 : 0.65}
+                      />
+                      <line
+                        x1={srcNode.x}
+                        y1={srcNode.y}
+                        x2={tgtNode.x}
+                        y2={tgtNode.y}
+                        stroke="transparent"
+                        strokeWidth={10}
+                      />
+                      {isEdgeHighlighted ? (
+                        <text
+                          x={midX}
+                          y={midY - 4}
+                          textAnchor="middle"
+                          fill="#ffe031"
+                          fontSize="9"
+                          fontFamily="JetBrains Mono, monospace"
+                          fontWeight="bold"
+                        >
+                          {edgeObj.predicate}
+                        </text>
+                      ) : null}
+                    </g>
+                  );
+                })}
+
+                {/* Nodes */}
+                {positionedNodes.map((nodeObj) => {
+                  const isSelected = selectedGraphNodeId === nodeObj.id;
+                  const isHovered = hoveredGraphNodeId === nodeObj.id;
+                  const isActive = isSelected || isHovered;
+                  const shortLabel =
+                    nodeObj.label.length > 18 ? `${nodeObj.label.slice(0, 17)}…` : nodeObj.label;
+
+                  return (
+                    <g
+                      key={nodeObj.id}
+                      className="cursor-pointer"
+                      onMouseEnter={() => setHoveredGraphNodeId(nodeObj.id)}
+                      onMouseLeave={() => setHoveredGraphNodeId(null)}
+                      onClick={() => {
+                        setSelectedGraphNodeId(nodeObj.id);
+                        setSelectedGraphEdgeId(null);
+                      }}
+                    >
+                      {isActive ? (
+                        <circle
+                          cx={nodeObj.x}
+                          cy={nodeObj.y}
+                          r={nodeObj.radius + 6}
+                          fill="none"
+                          stroke="#ffe031"
+                          strokeWidth="2"
+                          strokeDasharray="3 3"
+                        />
+                      ) : null}
+                      <circle
+                        cx={nodeObj.x}
+                        cy={nodeObj.y}
+                        r={nodeObj.radius}
+                        fill={nodeObj.color}
+                        stroke="#000000"
+                        strokeWidth={isActive ? 3 : 2}
+                      />
+                      <text
+                        x={nodeObj.x}
+                        y={nodeObj.y + nodeObj.radius + 12}
+                        textAnchor="middle"
+                        fill={isActive ? '#ffe031' : '#fff6de'}
+                        fontSize="10"
+                        fontFamily="JetBrains Mono, monospace"
+                        fontWeight="bold"
+                      >
+                        {shortLabel}
+                      </text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+
+            {/* Graph Node / Edge Inspector */}
+            <div className="border-2 border-black bg-[#08080c] p-3.5 lg:col-span-4">
+              {activeInspectNode ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <ComicSticker tone="yellow">NODE INSPECTOR</ComicSticker>
+                    <MonoBadge tone="cyan">{activeInspectNode.kind}</MonoBadge>
+                    <MonoBadge tone="neutral">{activeInspectNode.domain}</MonoBadge>
+                  </div>
+                  <div className="font-display text-sm text-[#fff6de] uppercase">
+                    {activeInspectNode.label}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
+                    <div className="border border-[#252538] bg-[#13131d] p-2">
+                      <div className="text-[9px] text-[#a6a2b8]">REVIEW STATE</div>
+                      <div className="font-bold text-[#a3ff12]">
+                        {activeInspectNode.reviewState || 'unreviewed'}
+                      </div>
+                    </div>
+                    <div className="border border-[#252538] bg-[#13131d] p-2">
+                      <div className="text-[9px] text-[#a6a2b8]">WEIGHT</div>
+                      <div className="font-bold text-[#ffe031]">{activeInspectNode.weight}</div>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="font-mono text-[10px] font-extrabold uppercase text-[#00f0ff]">
+                      CONNECTED EDGES
+                    </div>
+                    <div className="max-h-44 space-y-1.5 overflow-y-auto pr-1">
+                      {entityGraph.edges
+                        .filter(
+                          (edgeItem) =>
+                            edgeItem.source === activeInspectNode.id ||
+                            edgeItem.target === activeInspectNode.id,
+                        )
+                        .map((edgeItem) => {
+                          const peerId =
+                            edgeItem.source === activeInspectNode.id
+                              ? edgeItem.target
+                              : edgeItem.source;
+                          const peerNode = positionedNodesMap.get(peerId);
+                          return (
+                            <button
+                              key={edgeItem.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedGraphEdgeId(edgeItem.id);
+                                setSelectedGraphNodeId(null);
+                              }}
+                              className="block w-full border border-black bg-[#13131d] p-2 text-left font-mono text-[11px] hover:border-[#ffe031]"
+                            >
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="font-bold text-[#ffe031]">
+                                  {edgeItem.predicate}
+                                </span>
+                                <span className="text-[10px] text-[#00f0ff]">
+                                  {Math.round((edgeItem.confidence || 0) * 100)}%
+                                </span>
+                              </div>
+                              <div className="truncate text-[#fff6de]">
+                                {peerNode ? peerNode.label : peerId}
+                              </div>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                </div>
+              ) : activeInspectEdge ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <ComicSticker tone="magenta">EDGE INSPECTOR</ComicSticker>
+                    <MonoBadge tone="yellow">
+                      CONF {Math.round((activeInspectEdge.confidence || 0) * 100)}%
+                    </MonoBadge>
+                  </div>
+                  <div className="font-display text-sm text-[#ffe031] uppercase">
+                    {activeInspectEdge.predicate}
+                  </div>
+                  <div className="space-y-1.5 font-mono text-xs">
+                    <div className="border border-[#252538] bg-[#13131d] p-2">
+                      <span className="text-[10px] text-[#a6a2b8]">SOURCE: </span>
+                      <span className="font-bold text-[#00f0ff]">
+                        {positionedNodesMap.get(activeInspectEdge.source)?.label ||
+                          activeInspectEdge.source}
+                      </span>
+                    </div>
+                    <div className="border border-[#252538] bg-[#13131d] p-2">
+                      <span className="text-[10px] text-[#a6a2b8]">TARGET: </span>
+                      <span className="font-bold text-[#ff2e88]">
+                        {positionedNodesMap.get(activeInspectEdge.target)?.label ||
+                          activeInspectEdge.target}
+                      </span>
+                    </div>
+                    {activeInspectEdge.evidenceArtifactId ? (
+                      <div className="border border-[#252538] bg-[#13131d] p-2">
+                        <span className="text-[10px] text-[#a6a2b8]">EVIDENCE ARTIFACT: </span>
+                        <span className="break-all font-bold text-[#a3ff12]">
+                          {activeInspectEdge.evidenceArtifactId}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex h-full min-h-[260px] flex-col items-center justify-center gap-2 text-center">
+                  <ComicSticker tone="cream">HOVER OR CLICK</ComicSticker>
+                  <p className="max-w-xs font-mono text-xs text-[#a6a2b8]">
+                    Select or hover any constellation node or relationship edge to inspect entity
+                    attributes, confidence weights, and evidence links.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </SectionCard>
+
+      {/* 6. Discovery Proposal Queue */}
+      <SectionCard
+        title="DISCOVERY PROPOSAL QUEUE"
+        subtitle="Propose new sources for human review. Approved targets attach directly; rejected URIs are permanently remembered."
+        icon={<GitBranch className="h-4 w-4" />}
+        sticker={`${proposals.filter((p) => p.status === 'pending').length} PENDING`}
+        stickerTone="yellow"
+        accent="ok"
+        actions={
+          <div className="flex flex-wrap gap-1.5">
+            {(['all', 'pending', 'approved', 'rejected'] as const).map((statusOpt) => (
+              <button
+                key={statusOpt}
+                type="button"
+                onClick={() => setProposalFilter(statusOpt)}
+                className={`border-2 border-black px-2.5 py-1 font-mono text-[10px] font-extrabold uppercase ${
+                  proposalFilter === statusOpt
+                    ? 'bg-[#ffe031] text-[#08080c]'
+                    : 'bg-[#1b1b2b] text-[#fff6de] hover:text-[#00f0ff]'
+                }`}
+              >
+                {statusOpt}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        <form
+          onSubmit={handleCreateProposal}
+          className="mb-4 space-y-2.5 border-2 border-black bg-[#08080c] p-3.5 shadow-[4px_4px_0_#a3ff12]"
+        >
+          <div className="flex items-center justify-between">
+            <ComicSticker tone="ok">PROPOSE SOURCE</ComicSticker>
+            <span className="font-mono text-[10px] font-bold text-[#a6a2b8]">
+              SUPERVISED DISCOVERY GATE
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-12">
+            <select
+              value={proposalInstanceId}
+              onChange={(ev) => setProposalInstanceId(ev.target.value)}
+              className="riot-input px-2.5 py-1.5 font-mono text-xs font-bold text-[#ffe031] md:col-span-3"
+            >
+              {instances.length === 0 ? (
+                <option value="">Install a pack first</option>
+              ) : (
+                instances.map((inst) => (
+                  <option key={inst.id} value={inst.id}>
+                    {inst.name} ({inst.packId})
+                  </option>
+                ))
+              )}
+            </select>
+
+            <select
+              value={proposalConnectorId}
+              onChange={(ev) => setProposalConnectorId(ev.target.value)}
+              className="riot-input px-2.5 py-1.5 font-mono text-xs font-bold text-[#00f0ff] md:col-span-3"
+            >
+              {CONNECTOR_OPTIONS.map((connOpt) => (
+                <option key={connOpt.value} value={connOpt.value}>
+                  {connOpt.label}
+                </option>
+              ))}
+            </select>
+
+            <input
+              type="text"
+              value={proposalTargetType}
+              onChange={(ev) => setProposalTargetType(ev.target.value)}
+              placeholder="Target type (feed / repository)"
+              className="riot-input px-2.5 py-1.5 font-mono text-xs md:col-span-2"
+            />
+
+            <input
+              type="text"
+              value={proposalCanonicalName}
+              onChange={(ev) => setProposalCanonicalName(ev.target.value)}
+              placeholder="Canonical name"
+              className="riot-input px-2.5 py-1.5 font-mono text-xs md:col-span-4"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-12">
+            <input
+              type="text"
+              value={proposalSourceUri}
+              onChange={(ev) => setProposalSourceUri(ev.target.value)}
+              placeholder="Source URI (e.g. https://export.arxiv.org/api/query?search_query=cat:cs.AI)"
+              className="riot-input px-2.5 py-1.5 font-mono text-xs md:col-span-5"
+            />
+            <input
+              type="text"
+              value={proposalIndependenceGroup}
+              onChange={(ev) => setProposalIndependenceGroup(ev.target.value)}
+              placeholder="Independence group"
+              className="riot-input px-2.5 py-1.5 font-mono text-xs md:col-span-2"
+            />
+            <input
+              type="text"
+              value={proposalReason}
+              onChange={(ev) => setProposalReason(ev.target.value)}
+              placeholder="Discovery rationale"
+              className="riot-input px-2.5 py-1.5 font-mono text-xs md:col-span-3"
+            />
+            <button
+              type="submit"
+              disabled={submittingProposal || instances.length === 0}
+              className="riot-btn inline-flex items-center justify-center gap-1.5 bg-[#a3ff12] px-3 py-1.5 font-display text-xs text-[#08080c] uppercase disabled:opacity-50 md:col-span-2"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {submittingProposal ? '...' : 'PROPOSE'}
+            </button>
+          </div>
+        </form>
+
+        {filteredProposals.length === 0 ? (
+          <div className="border-2 border-dashed border-[#3a3a58] bg-[#08080c] py-8 text-center font-mono text-xs font-bold uppercase text-[#a6a2b8]">
+            NO DISCOVERY PROPOSALS IN &quot;{proposalFilter.toUpperCase()}&quot; QUEUE.
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {filteredProposals.map((proposal) => {
+              const isPending = proposal.status.toLowerCase() === 'pending';
+              const isBusy = busyProposalId === proposal.id;
+              return (
+                <div
+                  key={proposal.id}
+                  className="border-2 border-black bg-[#08080c] p-3 shadow-[4px_4px_0_#000]"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <MonoBadge tone={resolveProposalTone(proposal.status)}>
+                          {proposal.status}
+                        </MonoBadge>
+                        <MonoBadge tone="cyan">{proposal.connectorId}</MonoBadge>
+                        <MonoBadge tone="neutral">{proposal.targetType}</MonoBadge>
+                        <span className="font-display text-xs text-[#fff6de] uppercase">
+                          {proposal.canonicalName}
+                        </span>
+                      </div>
+                      <div className="mt-1 truncate font-mono text-[11px] font-bold text-[#00f0ff]">
+                        {proposal.sourceUri}
+                      </div>
+                      {proposal.reason ? (
+                        <div className="mt-1 font-mono text-[11px] text-[#a6a2b8]">
+                          REASON: {proposal.reason}
+                        </div>
+                      ) : null}
+                      {proposal.decisionReason ? (
+                        <div className="mt-1 font-mono text-[11px] text-[#ff334b]">
+                          DECISION: {proposal.decisionReason}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {isPending ? (
+                        <>
+                          <input
+                            type="text"
+                            value={rejectReasonById[proposal.id] || ''}
+                            onChange={(ev) =>
+                              setRejectReasonById((prev) => ({
+                                ...prev,
+                                [proposal.id]: ev.target.value,
+                              }))
+                            }
+                            placeholder="Optional reject reason"
+                            className="riot-input w-40 px-2 py-1 font-mono text-[10px]"
+                          />
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => void handleApproveProposal(proposal)}
+                            className="riot-btn inline-flex items-center gap-1 bg-[#a3ff12] px-2.5 py-1 font-mono text-[10px] font-extrabold text-[#08080c] uppercase disabled:opacity-50"
+                          >
+                            <Check className="h-3 w-3" />
+                            APPROVE
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => void handleRejectProposal(proposal)}
+                            className="riot-btn inline-flex items-center gap-1 bg-[#ff334b] px-2.5 py-1 font-mono text-[10px] font-extrabold text-white uppercase disabled:opacity-50"
+                          >
+                            <X className="h-3 w-3" />
+                            REJECT
+                          </button>
+                        </>
+                      ) : (
+                        <span className="font-mono text-[10px] font-bold text-[#a6a2b8]">
+                          DECIDED {formatShortTime(proposal.decidedAt || proposal.createdAt)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </SectionCard>

@@ -9,6 +9,8 @@ import {
   Flame,
   FolderKanban,
   Globe2,
+  KeyRound,
+  Laptop,
   LayoutDashboard,
   MessageSquare,
   Package,
@@ -46,6 +48,7 @@ import { AiGatewayTab, type ProviderDraftPrefill } from './components/AiGatewayT
 import { ArenaTab } from './components/ArenaTab';
 import { BlueprintsTab } from './components/BlueprintsTab';
 import { CoderTab } from './components/CoderTab';
+import { DesktopHostTab } from './components/DesktopHostTab';
 import { DocsTab } from './components/DocsTab';
 import { FlowsTab } from './components/FlowsTab';
 import { FreeModelsTab } from './components/FreeModelsTab';
@@ -55,7 +58,8 @@ import { ProjectsTab } from './components/ProjectsTab';
 import { SidekickDrawer } from './components/SidekickDrawer';
 import { StoragePoolTab } from './components/StoragePoolTab';
 import { TasksTab } from './components/TasksTab';
-import { ComicSticker, MonoBadge, ToastStack, type ToastNotice } from './components/UiPrimitives';
+import { ToastStack, ComicSticker, MonoBadge, type ToastNotice } from './components/UiPrimitives';
+import { VaultEnvTab } from './components/VaultEnvTab';
 import { WhatsAppTab } from './components/WhatsAppTab';
 import { WorldRadarTab } from './components/WorldRadarTab';
 
@@ -73,7 +77,9 @@ type NavTabId =
   | 'arena'
   | 'world-radar'
   | 'flows'
-  | 'blueprints';
+  | 'blueprints'
+  | 'vault-env'
+  | 'desktop';
 
 interface NavTabMeta {
   id: NavTabId;
@@ -97,6 +103,8 @@ const NAV_TABS: NavTabMeta[] = [
   { id: 'world-radar', sceneNum: '12', stageName: 'WORLD', icon: Globe2 },
   { id: 'flows', sceneNum: '13', stageName: 'FLOWS', icon: Workflow },
   { id: 'blueprints', sceneNum: '14', stageName: 'PACKS', icon: Package },
+  { id: 'vault-env', sceneNum: '15', stageName: 'SECRETS', icon: KeyRound },
+  { id: 'desktop', sceneNum: '16', stageName: 'DESKTOP', icon: Laptop },
 ];
 
 export function App() {
@@ -368,7 +376,7 @@ export function App() {
                 [REC ● 24FPS]
               </span>
               <span className="text-[#ffe031]">
-                SCENE {activeStageMeta.sceneNum}/14 :: {activeStageMeta.stageName}
+                SCENE {activeStageMeta.sceneNum}/{NAV_TABS.length} :: {activeStageMeta.stageName}
               </span>
               <span className="hidden items-center gap-1 text-[#a3ff12] xl:inline-flex">
                 <Activity className="h-3.5 w-3.5" />
@@ -649,6 +657,18 @@ export function App() {
 
         {activeTab === 'blueprints' ? (
           <BlueprintsTab onNotify={pushNotice} />
+        ) : null}
+
+        {activeTab === 'vault-env' ? (
+          <VaultEnvTab
+            projects={projects}
+            onReloadStorage={reloadStorage}
+            onNotify={pushNotice}
+          />
+        ) : null}
+
+        {activeTab === 'desktop' ? (
+          <DesktopHostTab onNotify={pushNotice} />
         ) : null}
       </main>
 

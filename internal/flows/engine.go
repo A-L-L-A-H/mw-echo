@@ -587,6 +587,21 @@ func (e *Engine) executeStep(
 		}
 		return e.opts.SendWhatsApp(ctx, deviceID, phone, message)
 
+	case StepKindSendTelegram, StepKindSendDiscord:
+		if e.opts.SendComms == nil {
+			return "", errors.New("SendComms hook is not configured")
+		}
+		commKind := "telegram"
+		if kind == StepKindSendDiscord {
+			commKind = "discord"
+		}
+		channelID := firstNonEmpty(cfg["channelId"], cfg["channel_id"])
+		targetRef := firstNonEmpty(cfg["targetRef"], cfg["target_ref"], cfg["chatId"], cfg["chat_id"], cfg["target"])
+		title := firstNonEmpty(cfg["title"], flowRec.Name)
+		body := firstNonEmpty(cfg["body"], cfg["message"], cfg["text"], prevOutput, triggerPayload)
+		priorityTier := firstNonEmpty(cfg["priorityTier"], cfg["priority_tier"], cfg["priority"])
+		return e.opts.SendComms(ctx, commKind, channelID, targetRef, title, body, priorityTier)
+
 	case StepKindSendWebhook:
 		return e.executeWebhookStep(ctx, flowRec, stepID, cfg, triggerPayload, prevOutput)
 
@@ -952,7 +967,8 @@ func isValidActionTier(tier string) bool {
 func isValidStepKind(kind string) bool {
 	switch kind {
 	case StepKindRadarRun, StepKindAIPrompt, StepKindCreateTask,
-		StepKindSendWhatsApp, StepKindSendWebhook, StepKindBackup9Drive:
+		StepKindSendWhatsApp, StepKindSendTelegram, StepKindSendDiscord,
+		StepKindSendWebhook, StepKindBackup9Drive:
 		return true
 	default:
 		return false

@@ -30,6 +30,12 @@ func (e *Engine) RegisterRoutes(api *echo.Group) {
 	grp.GET("/events/:id", e.handleGetEventDetail)
 	grp.GET("/entities", e.handleListEntities)
 	grp.GET("/entities/:id/relationships", e.handleListEntityRelationships)
+	grp.GET("/graph", e.handleGetGraph)
+
+	grp.GET("/proposals", e.handleListProposals)
+	grp.POST("/proposals", e.handleCreateProposal)
+	grp.POST("/proposals/:id/approve", e.handleApproveProposal)
+	grp.POST("/proposals/:id/reject", e.handleRejectProposal)
 
 	grp.GET("/alerts", e.handleListAlerts)
 	grp.POST("/alerts/:id/acknowledge", e.handleAcknowledgeAlert)
@@ -279,6 +285,55 @@ func (e *Engine) handleSubmitFeedback(c echo.Context) error {
 		return writeEngineError(c, err)
 	}
 	return c.JSON(http.StatusCreated, fb)
+}
+
+func (e *Engine) handleGetGraph(c echo.Context) error {
+	limit := parsePositiveInt(c.QueryParam("limit"), 100)
+	graph, err := e.BuildEntityGraph(c.Request().Context(), limit)
+	if err != nil {
+		return writeEngineError(c, err)
+	}
+	return c.JSON(http.StatusOK, graph)
+}
+
+func (e *Engine) handleListProposals(c echo.Context) error {
+	proposals, err := e.ListProposals(c.Request().Context(), c.QueryParam("instanceId"), c.QueryParam("status"))
+	if err != nil {
+		return writeEngineError(c, err)
+	}
+	return c.JSON(http.StatusOK, map[string]any{"proposals": proposals, "count": len(proposals)})
+}
+
+func (e *Engine) handleCreateProposal(c echo.Context) error {
+	var body ProposalInput
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+	}
+	prop, err := e.ProposeTarget(c.Request().Context(), body)
+	if err != nil {
+		return writeEngineError(c, err)
+	}
+	return c.JSON(http.StatusCreated, prop)
+}
+
+func (e *Engine) handleApproveProposal(c echo.Context) error {
+	prop, err := e.ApproveProposal(c.Request().Context(), c.Param("id"))
+	if err != nil {
+		return writeEngineError(c, err)
+	}
+	return c.JSON(http.StatusOK, prop)
+}
+
+func (e *Engine) handleRejectProposal(c echo.Context) error {
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	_ = c.Bind(&body)
+	prop, err := e.RejectProposal(c.Request().Context(), c.Param("id"), body.Reason)
+	if err != nil {
+		return writeEngineError(c, err)
+	}
+	return c.JSON(http.StatusOK, prop)
 }
 
 func writeEngineError(c echo.Context, err error) error {

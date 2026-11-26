@@ -42,8 +42,8 @@ func TestTaxonomyAndPackValidation(t *testing.T) {
 		t.Fatalf("expected 20 detection lenses, got %d", len(lenses))
 	}
 	packs := worldradar.AllPacks()
-	if len(packs) != 6 {
-		t.Fatalf("expected 6 alpha packs, got %d", len(packs))
+	if len(packs) != 8 {
+		t.Fatalf("expected 8 alpha packs, got %d", len(packs))
 	}
 	for _, pack := range packs {
 		if err := worldradar.ValidatePack(pack); err != nil {

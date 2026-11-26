@@ -16,6 +16,8 @@ const (
 	StepKindAIPrompt     = "ai_prompt"
 	StepKindCreateTask   = "create_task"
 	StepKindSendWhatsApp = "send_whatsapp"
+	StepKindSendTelegram = "send_telegram"
+	StepKindSendDiscord  = "send_discord"
 	StepKindSendWebhook  = "send_webhook"
 	StepKindBackup9Drive = "backup_9drive"
 
@@ -43,6 +45,7 @@ type Options struct {
 	RunAIPrompt  func(ctx context.Context, agentProfile, prompt string) (string, error)
 	CreateTask   func(ctx context.Context, project, code, title, priority string) (string, error)
 	SendWhatsApp func(ctx context.Context, deviceID, phone, message string) (string, error)
+	SendComms    func(ctx context.Context, kind, channelID, targetRef, title, body, priorityTier string) (string, error)
 	Backup9Drive func(ctx context.Context) (string, error)
 }
 

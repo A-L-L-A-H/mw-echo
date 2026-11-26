@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -14,9 +18,11 @@ import (
 	"time"
 
 	"github.com/A-L-L-A-H/mw-echo/internal/codingagent"
+	"github.com/A-L-L-A-H/mw-echo/internal/desktop"
 	"github.com/A-L-L-A-H/mw-echo/internal/importer"
 	"github.com/A-L-L-A-H/mw-echo/internal/server"
 	"github.com/A-L-L-A-H/mw-echo/internal/store"
+	"github.com/A-L-L-A-H/mw-echo/internal/vaultenv"
 )
 
 func defaultDataDir() string {
@@ -48,6 +54,15 @@ func main() {
 			return
 		case "code":
 			runCodeCommand(os.Args[2:])
+			return
+		case "env":
+			runEnvCommand(os.Args[2:])
+			return
+		case "doctor":
+			runDoctorCommand(os.Args[2:])
+			return
+		case "desktop":
+			runDesktopCommand(os.Args[2:])
 			return
 		}
 	}
@@ -126,9 +141,6 @@ func runCodeCommand(args []string) {
 	_ = fs.Parse(args)
 
 	prompt := strings.TrimSpace(strings.Join(fs.Args(), " "))
-	if prompt == "" {
-		log.Fatal("usage: mw-echo code [--dir <path>] [--agent opencode] [--mode act|plan] <prompt>")
-	}
 
 	hub, err := store.Open(*dataDir)
 	if err != nil {
@@ -144,16 +156,220 @@ func runCodeCommand(args []string) {
 		log.Fatalf("init coding agent: %v", err)
 	}
 
-	reply, err := engine.RunOneShot(context.Background(), *workDir, *agentProfile, *model, *mode, prompt, func(ev codingagent.AgentEvent) {
+	onEvent := func(ev codingagent.AgentEvent) {
 		switch ev.Type {
 		case "tool_call":
 			fmt.Fprintf(os.Stderr, "[tool:%s] %s\n", ev.ToolName, ev.Arguments)
 		case "tool_result":
 			fmt.Fprintf(os.Stderr, "[result:%s] %s\n", ev.ToolName, strings.TrimSpace(ev.Output))
 		}
-	})
+	}
+
+	if prompt == "" {
+		runCodeREPL(engine, *workDir, *agentProfile, *model, *mode, onEvent)
+		return
+	}
+
+	reply, err := engine.RunOneShot(context.Background(), *workDir, *agentProfile, *model, *mode, prompt, onEvent)
 	if err != nil {
 		log.Fatalf("coding agent failed: %v", err)
 	}
 	fmt.Println(reply)
+}
+
+func runCodeREPL(
+	engine *codingagent.Engine,
+	workDir string,
+	agentProfile string,
+	model string,
+	mode string,
+	onEvent func(codingagent.AgentEvent),
+) {
+	sess, err := engine.CreateSession(context.Background(), codingagent.SessionCreateInput{
+		WorkDir:      workDir,
+		AgentProfile: agentProfile,
+		Model:        model,
+		Mode:         mode,
+	})
+	if err != nil {
+		log.Fatalf("create coding session: %v", err)
+	}
+
+	fmt.Printf("MW-ECHO CODER REPL // session=%s mode=%s agent=%s — /plan /act /model <id> /exit\n", sess.ID, sess.Mode, sess.AgentProfile)
+
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for {
+		fmt.Printf("[%s] > ", sess.Mode)
+		if !scanner.Scan() {
+			break
+		}
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		if line == "/exit" || line == "/quit" {
+			break
+		}
+		if line == "/plan" {
+			nextMode := codingagent.ModePlan
+			updated, updErr := engine.UpdateSession(context.Background(), sess.ID, codingagent.SessionPatchInput{Mode: &nextMode})
+			if updErr != nil {
+				fmt.Fprintf(os.Stderr, "mode update failed: %v\n", updErr)
+				continue
+			}
+			sess = updated
+			fmt.Printf("mode switched to %s\n", sess.Mode)
+			continue
+		}
+		if line == "/act" {
+			nextMode := codingagent.ModeAct
+			updated, updErr := engine.UpdateSession(context.Background(), sess.ID, codingagent.SessionPatchInput{Mode: &nextMode})
+			if updErr != nil {
+				fmt.Fprintf(os.Stderr, "mode update failed: %v\n", updErr)
+				continue
+			}
+			sess = updated
+			fmt.Printf("mode switched to %s\n", sess.Mode)
+			continue
+		}
+		if line == "/model" || strings.HasPrefix(line, "/model ") {
+			nextModel := strings.TrimSpace(strings.TrimPrefix(line, "/model"))
+			if nextModel == "" {
+				fmt.Printf("current model: %s\n", sess.Model)
+				continue
+			}
+			updated, updErr := engine.UpdateSession(context.Background(), sess.ID, codingagent.SessionPatchInput{Model: &nextModel})
+			if updErr != nil {
+				fmt.Fprintf(os.Stderr, "model update failed: %v\n", updErr)
+				continue
+			}
+			sess = updated
+			fmt.Printf("model switched to %s\n", sess.Model)
+			continue
+		}
+
+		outcome, turnErr := engine.RunPromptWithCallback(context.Background(), sess.ID, line, onEvent)
+		if turnErr != nil {
+			fmt.Fprintf(os.Stderr, "coding agent error: %v\n", turnErr)
+			continue
+		}
+		sess = outcome.Session
+		fmt.Println(outcome.Reply)
+	}
+	if scanErr := scanner.Err(); scanErr != nil {
+		log.Fatalf("repl input error: %v", scanErr)
+	}
+}
+
+func runEnvCommand(args []string) {
+	if len(args) == 0 || args[0] != "export" {
+		log.Fatal("usage: mw-echo env export --project <slug> --env <dev|staging|prod|shared> [--data-dir <path>]")
+	}
+	fs := flag.NewFlagSet("env export", flag.ExitOnError)
+	project := fs.String("project", "default", "Project slug")
+	envName := fs.String("env", vaultenv.EnvDev, "Environment name (dev|staging|prod|shared)")
+	dataDir := fs.String("data-dir", defaultDataDir(), "SQLite and blob storage directory")
+	_ = fs.Parse(args[1:])
+
+	hub, err := store.Open(*dataDir)
+	if err != nil {
+		log.Fatalf("open hub store: %v", err)
+	}
+	defer func() { _ = hub.Close() }()
+
+	vaultEnv, err := vaultenv.NewVault(hub, vaultenv.Options{})
+	if err != nil {
+		log.Fatalf("init vaultenv: %v", err)
+	}
+	dotenv, err := vaultEnv.ExportDotEnv(context.Background(), *project, *envName)
+	if err != nil {
+		log.Fatalf("export dotenv: %v", err)
+	}
+	fmt.Print(dotenv)
+}
+
+func runDoctorCommand(args []string) {
+	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
+	repair := fs.Bool("repair", false, "Run self-repair actions before diagnostics")
+	dataDir := fs.String("data-dir", defaultDataDir(), "SQLite and blob storage directory")
+	_ = fs.Parse(args)
+
+	hub, err := store.Open(*dataDir)
+	if err != nil {
+		log.Fatalf("open hub store: %v", err)
+	}
+	defer func() { _ = hub.Close() }()
+
+	desktopMgr, err := desktop.NewManager(hub, desktop.Options{})
+	if err != nil {
+		log.Fatalf("init desktop manager: %v", err)
+	}
+
+	if *repair {
+		repairRes, repErr := desktopMgr.RunRepair(context.Background())
+		if repErr != nil {
+			log.Fatalf("doctor repair failed: %v", repErr)
+		}
+		fmt.Println(repairRes.Report.SupportReportMarkdown)
+		return
+	}
+
+	report, err := desktopMgr.RunDoctor(context.Background())
+	if err != nil {
+		log.Fatalf("doctor failed: %v", err)
+	}
+	fmt.Println(report.SupportReportMarkdown)
+}
+
+func runDesktopCommand(args []string) {
+	fs := flag.NewFlagSet("desktop", flag.ExitOnError)
+	addr := fs.String("addr", envOrDefault("MW_ECHO_ADDR", "127.0.0.1:4310"), "HTTP listen address")
+	dataDir := fs.String("data-dir", defaultDataDir(), "SQLite and blob storage directory")
+	authToken := fs.String("token", os.Getenv("MW_ECHO_TOKEN"), "Optional Bearer token for /api/* routes")
+	waUser := fs.String("wa-user", envOrDefault("MW_ECHO_WA_USER", os.Getenv("WHATSAPP_GATEWAY_USERNAME")), "Optional Basic Auth username for GOWA endpoints")
+	waPass := fs.String("wa-pass", envOrDefault("MW_ECHO_WA_PASS", os.Getenv("WHATSAPP_GATEWAY_PASSWORD")), "Optional Basic Auth password for GOWA endpoints")
+	_ = fs.Parse(args)
+
+	ln, err := net.Listen("tcp", *addr)
+	if err != nil {
+		log.Fatalf("listen %s: %v", *addr, err)
+	}
+
+	hub, err := store.Open(*dataDir)
+	if err != nil {
+		_ = ln.Close()
+		log.Fatalf("open hub store: %v", err)
+	}
+	defer func() { _ = hub.Close() }()
+
+	app := server.NewEcho(hub, server.Config{
+		Addr:            ln.Addr().String(),
+		AuthToken:       *authToken,
+		WAUser:          *waUser,
+		WAPass:          *waPass,
+		WAWebhookURL:    envOrDefault("MW_ECHO_WA_WEBHOOK_URL", os.Getenv("WHATSAPP_WEBHOOK_URL")),
+		WAWebhookSecret: envOrDefault("MW_ECHO_WA_WEBHOOK_SECRET", os.Getenv("WHATSAPP_WEBHOOK_SECRET")),
+	})
+	app.Listener = ln
+
+	go func() {
+		log.Printf("[mw-echo] desktop listening on http://%s (data: %s)", ln.Addr().String(), hub.DataDir())
+		if serveErr := app.StartServer(app.Server); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			log.Fatalf("desktop server error: %v", serveErr)
+		}
+	}()
+
+	launchURL := "http://" + ln.Addr().String()
+	if winErr := desktop.OpenDesktopWindow(launchURL); winErr != nil {
+		log.Printf("[mw-echo] desktop window warning: %v", winErr)
+	}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	<-sigCh
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = app.Shutdown(ctx)
 }

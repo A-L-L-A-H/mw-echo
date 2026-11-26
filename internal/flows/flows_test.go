@@ -473,3 +473,83 @@ func TestDispatchTriggerAndHTTPRoutes(t *testing.T) {
 		t.Fatalf("DELETE /api/flows/:id status=%d body=%s", delRec.Code, delRec.Body.String())
 	}
 }
+
+func TestSendCommsStepsTelegramAndDiscord(t *testing.T) {
+	ctx := context.Background()
+
+	type capturedComms struct {
+		kind         string
+		channelID    string
+		targetRef    string
+		title        string
+		body         string
+		priorityTier string
+	}
+	var calls []capturedComms
+
+	engine, _ := openTestEngine(t, flows.Options{
+		SendComms: func(ctx context.Context, kind, channelID, targetRef, title, body, priorityTier string) (string, error) {
+			calls = append(calls, capturedComms{
+				kind:         kind,
+				channelID:    channelID,
+				targetRef:    targetRef,
+				title:        title,
+				body:         body,
+				priorityTier: priorityTier,
+			})
+			return "dlv-" + kind, nil
+		},
+	})
+
+	flowRec, err := engine.UpsertFlow(ctx, flows.FlowRecord{
+		Name:        "Comms Fanout Flow",
+		TriggerKind: flows.TriggerManual,
+		ActionTier:  flows.TierA1,
+		Enabled:     true,
+		Steps: []flows.FlowStep{
+			{
+				ID:   "tg",
+				Kind: flows.StepKindSendTelegram,
+				Config: map[string]string{
+					"channelId":    "ch-tg-1",
+					"chatId":       "-100999",
+					"message":      "TG alert: {{trigger}}",
+					"priorityTier": "P1",
+				},
+			},
+			{
+				ID:   "dc",
+				Kind: flows.StepKindSendDiscord,
+				Config: map[string]string{
+					"channelId": "ch-dc-1",
+					"title":     "Discord Incident",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("upsert comms flow: %v", err)
+	}
+
+	runRec, err := engine.RunFlowByID(ctx, flowRec.ID, "node-down")
+	if err != nil {
+		t.Fatalf("run comms flow: %v", err)
+	}
+	if runRec.Status != flows.RunStatusOK {
+		t.Fatalf("expected ok status, got %s", runRec.Status)
+	}
+	if len(calls) != 2 {
+		t.Fatalf("expected 2 SendComms calls, got %d", len(calls))
+	}
+
+	// Telegram step defaults title to flowRec.Name and body from cfg["message"]
+	if calls[0].kind != "telegram" || calls[0].channelID != "ch-tg-1" || calls[0].targetRef != "-100999" ||
+		calls[0].title != "Comms Fanout Flow" || calls[0].body != "TG alert: node-down" || calls[0].priorityTier != "P1" {
+		t.Fatalf("unexpected telegram call: %+v", calls[0])
+	}
+	// Discord step defaults body from prevOutput ("dlv-telegram") and uses cfg["title"]
+	if calls[1].kind != "discord" || calls[1].channelID != "ch-dc-1" ||
+		calls[1].title != "Discord Incident" || calls[1].body != "dlv-telegram" {
+		t.Fatalf("unexpected discord call: %+v", calls[1])
+	}
+}

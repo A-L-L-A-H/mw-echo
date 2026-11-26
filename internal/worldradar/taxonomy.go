@@ -142,6 +142,24 @@ var alphaPacks = []PackManifest{
 		Lenses:      []string{"L04", "L05", "L12", "L19"},
 		DefaultMode: "monitor",
 	},
+	{
+		ID:          "radar.social-trends",
+		Version:     TaxonomyVersion,
+		Name:        "Social & Media Narrative Radar",
+		Description: "Monitors social narrative velocity, sentiment shifts, and platform discourse trends.",
+		Domains:     []string{"D11"},
+		Lenses:      []string{"L01", "L02", "L08", "L09", "L10"},
+		DefaultMode: "monitor",
+	},
+	{
+		ID:          "radar.business-competitor",
+		Version:     TaxonomyVersion,
+		Name:        "Business & Competitor Radar",
+		Description: "Tracks corporate moves, competitor releases, ecosystem shifts, and market repricing.",
+		Domains:     []string{"D05"},
+		Lenses:      []string{"L04", "L06", "L07", "L13", "L18"},
+		DefaultMode: "monitor",
+	},
 }
 
 var domainIndex = buildDomainIndex()

@@ -12,6 +12,7 @@ import {
   Phone,
   Plus,
   QrCode,
+  Radio,
   RefreshCw,
   Save,
   Search,
@@ -24,9 +25,13 @@ import {
   X,
 } from 'lucide-react';
 import {
+  broadcastCommsMessage,
   createWhatsAppDevice,
   DEFAULT_AGENT_IDS,
+  deleteCommsChannel,
   deleteWhatsAppDevice,
+  fetchCommsChannels,
+  fetchCommsDeliveries,
   fetchWhatsAppChats,
   fetchWhatsAppMessages,
   loginWhatsAppDevice,
@@ -34,7 +39,12 @@ import {
   pairWhatsAppDevice,
   patchWhatsAppDeviceConfig,
   reconnectWhatsAppDevice,
+  sendCommsMessage,
   sendWhatsAppMessage,
+  upsertCommsChannel,
+  type CommsChannelKind,
+  type CommsChannelRecord,
+  type CommsDeliveryRecord,
   type WhatsAppChat,
   type WhatsAppDevice,
   type WhatsAppDeviceConfigPatch,
@@ -130,6 +140,25 @@ export function WhatsAppTab({
   const [composeText, setComposeText] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
   const [copiedEnvAll, setCopiedEnvAll] = useState(false);
+
+  // Omnichannel Relay (Telegram & Discord)
+  const [commsChannels, setCommsChannels] = useState<CommsChannelRecord[]>([]);
+  const [commsDeliveries, setCommsDeliveries] = useState<CommsDeliveryRecord[]>([]);
+  const [loadingComms, setLoadingComms] = useState(false);
+  const [newChannelKind, setNewChannelKind] = useState<CommsChannelKind>('telegram');
+  const [newChannelName, setNewChannelName] = useState('');
+  const [newChannelSecret, setNewChannelSecret] = useState('');
+  const [newChannelTargetRef, setNewChannelTargetRef] = useState('');
+  const [savingChannel, setSavingChannel] = useState(false);
+  const [deletingChannelId, setDeletingChannelId] = useState<string | null>(null);
+
+  const [relayChannelId, setRelayChannelId] = useState('');
+  const [relayTargetOverride, setRelayTargetOverride] = useState('');
+  const [relayTitle, setRelayTitle] = useState('MW-ECHO // ALERT');
+  const [relayBody, setRelayBody] = useState('');
+  const [relayPriority, setRelayPriority] = useState('P1');
+  const [sendingRelay, setSendingRelay] = useState(false);
+  const [broadcastingRelay, setBroadcastingRelay] = useState(false);
 
   const threadEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -470,6 +499,147 @@ export function WhatsAppTab({
       setCopiedEnvAll(true);
       onNotify('ok', 'Copied mw-xv WhatsApp GOWA env block.');
       window.setTimeout(() => setCopiedEnvAll(false), 1800);
+    }
+  };
+
+  const loadCommsRelay = useCallback(async () => {
+    setLoadingComms(true);
+    try {
+      const [channelsOutcome, deliveriesOutcome] = await Promise.allSettled([
+        fetchCommsChannels(),
+        fetchCommsDeliveries(40),
+      ]);
+      if (channelsOutcome.status === 'fulfilled') {
+        const list = channelsOutcome.value.channels ?? [];
+        setCommsChannels(list);
+        setRelayChannelId((prev) => {
+          if (prev && list.some((ch) => ch.id === prev)) return prev;
+          return list[0]?.id ?? '';
+        });
+      }
+      if (deliveriesOutcome.status === 'fulfilled') {
+        setCommsDeliveries(deliveriesOutcome.value.deliveries ?? []);
+      }
+    } finally {
+      setLoadingComms(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCommsRelay();
+  }, [loadCommsRelay]);
+
+  const handleAddCommsChannel = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    if (!newChannelName.trim() || !newChannelSecret.trim()) {
+      onNotify('err', 'Channel name and bot token / webhook URL are required.');
+      return;
+    }
+    setSavingChannel(true);
+    try {
+      const created = await upsertCommsChannel({
+        kind: newChannelKind,
+        name: newChannelName.trim(),
+        secret: newChannelSecret.trim(),
+        targetRef: newChannelTargetRef.trim() || undefined,
+        enabled: true,
+      });
+      setNewChannelName('');
+      setNewChannelSecret('');
+      setNewChannelTargetRef('');
+      setRelayChannelId(created.id);
+      onNotify('ok', `Armed ${created.kind.toUpperCase()} relay "${created.name}".`);
+      await loadCommsRelay();
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error ? caughtError.message : 'Failed to save comms channel';
+      onNotify('err', message);
+    } finally {
+      setSavingChannel(false);
+    }
+  };
+
+  const handleDeleteCommsChannel = async (channel: CommsChannelRecord) => {
+    setDeletingChannelId(channel.id);
+    try {
+      await deleteCommsChannel(channel.id);
+      onNotify('ok', `Removed ${channel.kind.toUpperCase()} channel "${channel.name}".`);
+      await loadCommsRelay();
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error ? caughtError.message : 'Failed to remove channel';
+      onNotify('err', message);
+    } finally {
+      setDeletingChannelId(null);
+    }
+  };
+
+  const handleQuickSendRelay = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    if (!relayBody.trim()) {
+      onNotify('err', 'Relay message body is required.');
+      return;
+    }
+    const chosenChannel = commsChannels.find((ch) => ch.id === relayChannelId);
+    if (!chosenChannel) {
+      onNotify('err', 'Add and select a Telegram or Discord channel first.');
+      return;
+    }
+    setSendingRelay(true);
+    try {
+      const delivery = await sendCommsMessage({
+        channelId: chosenChannel.id,
+        kind: chosenChannel.kind,
+        targetRef: relayTargetOverride.trim() || undefined,
+        title: relayTitle.trim() || 'MW-ECHO DISPATCH',
+        body: relayBody.trim(),
+        priorityTier: relayPriority,
+      });
+      setRelayBody('');
+      const isFailedDelivery = delivery.status === 'failed' || delivery.status === 'error';
+      onNotify(
+        isFailedDelivery ? 'err' : 'ok',
+        isFailedDelivery
+          ? `Relay error (${chosenChannel.name}): ${delivery.errorMsg || 'delivery failed'}`
+          : `Dispatched via ${chosenChannel.kind.toUpperCase()} "${chosenChannel.name}".`,
+      );
+      await loadCommsRelay();
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error ? caughtError.message : 'Quick send relay failed';
+      onNotify('err', message);
+    } finally {
+      setSendingRelay(false);
+    }
+  };
+
+  const handleBroadcastRelay = async () => {
+    if (!relayBody.trim()) {
+      onNotify('err', 'Enter a message body before firing Broadcast Fanout.');
+      return;
+    }
+    setBroadcastingRelay(true);
+    try {
+      const reply = await broadcastCommsMessage({
+        title: relayTitle.trim() || 'MW-ECHO BROADCAST',
+        body: relayBody.trim(),
+        priorityTier: relayPriority,
+      });
+      setRelayBody('');
+      const okCount = (reply.deliveries ?? []).filter(
+        (d) => d.status !== 'failed' && d.status !== 'error',
+      ).length;
+      onNotify(
+        'ok',
+        `Broadcast fanout complete: ${okCount}/${reply.count} channel(s) delivered.`,
+      );
+      await loadCommsRelay();
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error ? caughtError.message : 'Broadcast fanout failed';
+      onNotify('err', message);
+    } finally {
+      setBroadcastingRelay(false);
     }
   };
 
@@ -1209,6 +1379,281 @@ export function WhatsAppTab({
             value="WHATSAPP_GATEWAY_URL=http://mw-echo:4310"
             tone="cyan"
           />
+        </div>
+      </SectionCard>
+
+      {/* 4. Omnichannel Relay // Telegram & Discord */}
+      <SectionCard
+        title="OMNICHANNEL RELAY // TELEGRAM & DISCORD"
+        subtitle="AES-256-GCM encrypted bot tokens & Discord webhooks with Quick Send, Broadcast Fanout & Delivery Ledger."
+        icon={<Radio className="h-4 w-4" />}
+        sticker={`${commsChannels.length} CHANNELS`}
+        stickerTone="magenta"
+        accent="magenta"
+        actions={
+          <button
+            type="button"
+            onClick={() => void loadCommsRelay()}
+            className="riot-btn inline-flex items-center gap-1.5 bg-[#1b1b2b] px-3 py-1.5 font-mono text-xs font-extrabold text-[#fff6de]"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loadingComms ? 'animate-spin' : ''}`} />
+            SYNC RELAY
+          </button>
+        }
+      >
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+          {/* Left: Add Channel + Configured Channels */}
+          <div className="space-y-4 xl:col-span-6">
+            <form
+              onSubmit={handleAddCommsChannel}
+              className="space-y-2.5 border-2 border-black bg-[#08080c] p-3.5 shadow-[4px_4px_0_#ff2e88]"
+            >
+              <div className="flex items-center justify-between">
+                <ComicSticker tone="magenta">ARM RELAY CHANNEL</ComicSticker>
+                <span className="font-mono text-[10px] font-bold text-[#a6a2b8]">
+                  AES-256-GCM AT REST
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <select
+                  value={newChannelKind}
+                  onChange={(ev) => setNewChannelKind(ev.target.value)}
+                  className="riot-input px-2.5 py-1.5 font-mono text-xs font-bold text-[#ffe031]"
+                >
+                  <option value="telegram">TELEGRAM BOT</option>
+                  <option value="discord">DISCORD WEBHOOK</option>
+                </select>
+                <input
+                  type="text"
+                  value={newChannelName}
+                  onChange={(ev) => setNewChannelName(ev.target.value)}
+                  placeholder="Channel name (e.g. ops-alerts)"
+                  className="riot-input px-2.5 py-1.5 font-mono text-xs sm:col-span-2"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <input
+                  type="password"
+                  value={newChannelSecret}
+                  onChange={(ev) => setNewChannelSecret(ev.target.value)}
+                  placeholder={
+                    newChannelKind === 'telegram'
+                      ? 'Telegram Bot Token (123456:ABC...)'
+                      : 'Discord Webhook URL (https://discord.com/api/webhooks/...)'
+                  }
+                  className="riot-input px-2.5 py-1.5 font-mono text-xs"
+                />
+                <input
+                  type="text"
+                  value={newChannelTargetRef}
+                  onChange={(ev) => setNewChannelTargetRef(ev.target.value)}
+                  placeholder={
+                    newChannelKind === 'telegram'
+                      ? 'Default Chat ID (e.g. -100123456)'
+                      : 'Channel / Thread label (optional)'
+                  }
+                  className="riot-input px-2.5 py-1.5 font-mono text-xs"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingChannel}
+                className="riot-btn inline-flex items-center gap-1.5 bg-[#ffe031] px-4 py-1.5 font-display text-xs text-[#08080c] uppercase disabled:opacity-50"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                {savingChannel ? 'ENCRYPTING...' : 'REGISTER CHANNEL'}
+              </button>
+            </form>
+
+            {/* Configured Channels List */}
+            <div className="space-y-2">
+              <div className="font-mono text-[10px] font-extrabold uppercase text-[#00f0ff]">
+                ACTIVE RELAY CHANNELS ({commsChannels.length})
+              </div>
+              {commsChannels.length === 0 ? (
+                <div className="border-2 border-dashed border-[#3a3a58] bg-[#08080c] py-6 text-center font-mono text-xs font-bold uppercase text-[#a6a2b8]">
+                  NO TELEGRAM OR DISCORD CHANNELS REGISTERED YET.
+                </div>
+              ) : (
+                commsChannels.map((channel) => (
+                  <div
+                    key={channel.id}
+                    className="flex flex-wrap items-center justify-between gap-2 border-2 border-black bg-[#08080c] px-3 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <MonoBadge tone={channel.kind === 'telegram' ? 'cyan' : 'magenta'}>
+                          {channel.kind}
+                        </MonoBadge>
+                        <span className="font-display text-xs text-[#fff6de] uppercase">
+                          {channel.name}
+                        </span>
+                        <MonoBadge tone={channel.enabled ? 'ok' : 'neutral'}>
+                          {channel.enabled ? 'ENABLED' : 'PAUSED'}
+                        </MonoBadge>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-2 font-mono text-[10px] text-[#a6a2b8]">
+                        <span>
+                          SECRET: {channel.secretHint || (channel.secretConfigured ? 'configured' : 'missing')}
+                        </span>
+                        {channel.targetRef ? (
+                          <span className="text-[#ffe031]">TARGET: {channel.targetRef}</span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={deletingChannelId === channel.id}
+                      onClick={() => void handleDeleteCommsChannel(channel)}
+                      className="riot-btn inline-flex items-center gap-1 bg-[#ff334b] px-2.5 py-1 font-mono text-[10px] font-extrabold text-white uppercase disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      {deletingChannelId === channel.id ? '...' : 'DEL'}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Right: Quick Send + Broadcast Fanout + Delivery Log */}
+          <div className="space-y-4 xl:col-span-6">
+            <form
+              onSubmit={handleQuickSendRelay}
+              className="space-y-2.5 border-2 border-black bg-[#08080c] p-3.5 shadow-[4px_4px_0_#00f0ff]"
+            >
+              <div className="flex items-center justify-between">
+                <ComicSticker tone="cyan">DISPATCH &amp; BROADCAST</ComicSticker>
+                <MonoBadge tone="yellow">PRIORITY EMBEDS</MonoBadge>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <select
+                  value={relayChannelId}
+                  onChange={(ev) => setRelayChannelId(ev.target.value)}
+                  className="riot-input px-2.5 py-1.5 font-mono text-xs font-bold text-[#00f0ff] sm:col-span-2"
+                >
+                  {commsChannels.length === 0 ? (
+                    <option value="">No channels registered</option>
+                  ) : (
+                    commsChannels.map((ch) => (
+                      <option key={ch.id} value={ch.id}>
+                        [{ch.kind.toUpperCase()}] {ch.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <select
+                  value={relayPriority}
+                  onChange={(ev) => setRelayPriority(ev.target.value)}
+                  className="riot-input px-2.5 py-1.5 font-mono text-xs font-bold text-[#ffe031]"
+                >
+                  <option value="P0">P0 CRITICAL</option>
+                  <option value="P1">P1 HIGH</option>
+                  <option value="P2">P2 MEDIUM</option>
+                  <option value="P3">P3 INFO</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <input
+                  type="text"
+                  value={relayTitle}
+                  onChange={(ev) => setRelayTitle(ev.target.value)}
+                  placeholder="Dispatch title"
+                  className="riot-input px-2.5 py-1.5 font-mono text-xs"
+                />
+                <input
+                  type="text"
+                  value={relayTargetOverride}
+                  onChange={(ev) => setRelayTargetOverride(ev.target.value)}
+                  placeholder="Optional Chat ID override"
+                  className="riot-input px-2.5 py-1.5 font-mono text-xs"
+                />
+              </div>
+
+              <textarea
+                rows={3}
+                value={relayBody}
+                onChange={(ev) => setRelayBody(ev.target.value)}
+                placeholder="Type tactical alert or intelligence dispatch..."
+                className="riot-input w-full p-2.5 font-mono text-xs"
+              />
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="submit"
+                  disabled={sendingRelay || commsChannels.length === 0}
+                  className="riot-btn inline-flex items-center gap-1.5 bg-[#00f0ff] px-4 py-1.5 font-display text-xs text-[#08080c] uppercase disabled:opacity-50"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {sendingRelay ? 'SENDING...' : 'QUICK SEND'}
+                </button>
+                <button
+                  type="button"
+                  disabled={broadcastingRelay || commsChannels.length === 0}
+                  onClick={() => void handleBroadcastRelay()}
+                  className="riot-btn inline-flex items-center gap-1.5 bg-[#ff2e88] px-4 py-1.5 font-display text-xs text-white uppercase hover:bg-[#ffe031] hover:text-[#08080c] disabled:opacity-50"
+                >
+                  <Radio className="h-3.5 w-3.5" />
+                  {broadcastingRelay ? 'FANNING OUT...' : 'BROADCAST FANOUT'}
+                </button>
+              </div>
+            </form>
+
+            {/* Delivery Log */}
+            <div className="space-y-2">
+              <div className="font-mono text-[10px] font-extrabold uppercase text-[#a3ff12]">
+                OMNICHANNEL DELIVERY LOG ({commsDeliveries.length})
+              </div>
+              {commsDeliveries.length === 0 ? (
+                <div className="border-2 border-dashed border-[#3a3a58] bg-[#08080c] py-6 text-center font-mono text-xs font-bold uppercase text-[#a6a2b8]">
+                  NO DELIVERIES DISPATCHED YET.
+                </div>
+              ) : (
+                <div className="max-h-60 space-y-1.5 overflow-y-auto pr-1">
+                  {commsDeliveries.map((delivery) => {
+                    const isFailed = delivery.status === 'error' || delivery.status === 'failed';
+                    return (
+                      <div
+                        key={delivery.id}
+                        className="border-2 border-black bg-[#08080c] px-3 py-2 font-mono text-xs"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <MonoBadge tone={isFailed ? 'err' : 'ok'}>
+                              {delivery.status || 'ok'}
+                            </MonoBadge>
+                            <MonoBadge tone={delivery.kind === 'telegram' ? 'cyan' : 'magenta'}>
+                              {delivery.kind}
+                            </MonoBadge>
+                            <span className="font-extrabold text-[#fff6de]">
+                              {delivery.title || '(untitled)'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-[#a6a2b8]">
+                            {formatShortTime(delivery.createdAt)}
+                          </span>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-[11px] text-[#a6a2b8]">
+                          {delivery.body}
+                        </p>
+                        {delivery.errorMsg ? (
+                          <div className="mt-1 text-[10px] font-bold text-[#ff334b]">
+                            ERR: {delivery.errorMsg}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </SectionCard>
     </div>
