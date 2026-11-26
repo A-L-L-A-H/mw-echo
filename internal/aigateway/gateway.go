@@ -21,6 +21,7 @@ import (
 
 const (
 	headerAgentID    = "X-MW-Agent"
+	headerRTKMode    = "X-MW-RTK-Mode"
 	headerCacheState = "X-MW-Echo-Cache"
 	headerProvider   = "X-MW-Echo-Provider"
 	headerModel      = "X-MW-Echo-Model"
@@ -559,7 +560,7 @@ func (g *Gateway) resolveRoutePlan(ctx context.Context, explicitAgentHeader, def
 	return agentID, effectiveModel, tierOrder, rtkActive
 }
 
-func (g *Gateway) routeCompletion(ctx context.Context, explicitAgentHeader, defaultAgentID string, incomingReq ChatCompletionRequest) (routeOutcome, error) {
+func (g *Gateway) routeCompletion(ctx context.Context, explicitAgentHeader, defaultAgentID, rtkMode string, incomingReq ChatCompletionRequest) (routeOutcome, error) {
 	startedAt := time.Now()
 	requestedModel := strings.TrimSpace(incomingReq.Model)
 	settings := g.GetSettings(ctx)
@@ -570,7 +571,11 @@ func (g *Gateway) routeCompletion(ctx context.Context, explicitAgentHeader, defa
 	outboundReq.Model = effectiveModel
 
 	rtkTokensSaved := 0
-	if rtkActive {
+	if strings.EqualFold(strings.TrimSpace(rtkMode), "caveman") {
+		compressedMsgs, saved := CompressCaveman(outboundReq.Messages)
+		outboundReq.Messages = compressedMsgs
+		rtkTokensSaved = saved
+	} else if rtkActive {
 		compressedMsgs, saved := CompressMessages(outboundReq.Messages)
 		outboundReq.Messages = compressedMsgs
 		rtkTokensSaved = saved
@@ -1456,6 +1461,13 @@ func (g *Gateway) handleListOpenAIModels(c echo.Context) error {
 	})
 }
 
+func resolveRTKMode(c echo.Context) string {
+	if mode := strings.TrimSpace(c.Request().Header.Get(headerRTKMode)); mode != "" {
+		return strings.ToLower(mode)
+	}
+	return strings.ToLower(strings.TrimSpace(c.QueryParam("rtk")))
+}
+
 func (g *Gateway) handleChatCompletions(c echo.Context) error {
 	var completionReq ChatCompletionRequest
 	if err := c.Bind(&completionReq); err != nil {
@@ -1470,11 +1482,12 @@ func (g *Gateway) handleChatCompletions(c echo.Context) error {
 	}
 
 	agentHeader := c.Request().Header.Get(headerAgentID)
+	rtkMode := resolveRTKMode(c)
 	if completionReq.Stream {
-		return g.handleStreamingChatCompletion(c, agentHeader, completionReq)
+		return g.handleStreamingChatCompletion(c, agentHeader, rtkMode, completionReq)
 	}
 
-	outcome, err := g.routeCompletion(c.Request().Context(), agentHeader, "default", completionReq)
+	outcome, err := g.routeCompletion(c.Request().Context(), agentHeader, "default", rtkMode, completionReq)
 	if err != nil {
 		return writeGatewayError(c, err)
 	}
@@ -1483,7 +1496,7 @@ func (g *Gateway) handleChatCompletions(c echo.Context) error {
 	return c.Blob(http.StatusOK, "application/json; charset=utf-8", outcome.RawBody)
 }
 
-func (g *Gateway) handleStreamingChatCompletion(c echo.Context, agentHeader string, incomingReq ChatCompletionRequest) error {
+func (g *Gateway) handleStreamingChatCompletion(c echo.Context, agentHeader, rtkMode string, incomingReq ChatCompletionRequest) error {
 	ctx := c.Request().Context()
 	startedAt := time.Now()
 	requestedModel := strings.TrimSpace(incomingReq.Model)
@@ -1492,7 +1505,11 @@ func (g *Gateway) handleStreamingChatCompletion(c echo.Context, agentHeader stri
 	outboundReq := incomingReq
 	outboundReq.Model = effectiveModel
 	rtkTokensSaved := 0
-	if rtkActive {
+	if strings.EqualFold(strings.TrimSpace(rtkMode), "caveman") {
+		compressedMsgs, saved := CompressCaveman(outboundReq.Messages)
+		outboundReq.Messages = compressedMsgs
+		rtkTokensSaved = saved
+	} else if rtkActive {
 		compressedMsgs, saved := CompressMessages(outboundReq.Messages)
 		outboundReq.Messages = compressedMsgs
 		rtkTokensSaved = saved
@@ -1626,7 +1643,8 @@ func (g *Gateway) handleAnthropicMessages(c echo.Context) error {
 
 	openAIReq := anthropicToOpenAIRequest(anthReq)
 	agentHeader := c.Request().Header.Get(headerAgentID)
-	outcome, err := g.routeCompletion(c.Request().Context(), agentHeader, "claude-code", openAIReq)
+	rtkMode := resolveRTKMode(c)
+	outcome, err := g.routeCompletion(c.Request().Context(), agentHeader, "claude-code", rtkMode, openAIReq)
 	if err != nil {
 		statusCode := http.StatusBadGateway
 		var upErr *upstreamCallError

@@ -45,6 +45,7 @@ func (e *Engine) RegisterRoutes(api *echo.Group) {
 
 	grp.GET("/sources/health", e.handleListSourcesHealth)
 	grp.POST("/feedback", e.handleSubmitFeedback)
+	grp.POST("/extract-markdown", e.handleExtractMarkdown)
 }
 
 func (e *Engine) handleListDomains(c echo.Context) error {
@@ -336,12 +337,39 @@ func (e *Engine) handleRejectProposal(c echo.Context) error {
 	return c.JSON(http.StatusOK, prop)
 }
 
+func (e *Engine) handleExtractMarkdown(c echo.Context) error {
+	var body struct {
+		URL  string `json:"url"`
+		HTML string `json:"html"`
+	}
+	if err := c.Bind(&body); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+	}
+	if body.HTML != "" {
+		title := ExtractTitleFromHTML(body.HTML)
+		markdown := ExtractMarkdownFromHTML(body.HTML, body.URL)
+		return c.JSON(http.StatusOK, ExtractMarkdownResult{
+			URL:       body.URL,
+			Title:     title,
+			Markdown:  markdown,
+			CharCount: len(markdown),
+		})
+	}
+	extracted, err := e.FetchAndExtractMarkdown(c.Request().Context(), body.URL, false)
+	if err != nil {
+		return writeEngineError(c, err)
+	}
+	return c.JSON(http.StatusOK, extracted)
+}
+
 func writeEngineError(c echo.Context, err error) error {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
 	case errors.Is(err, ErrValidation):
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	case errors.Is(err, ErrSSRFBlocked):
+		return c.JSON(http.StatusForbidden, map[string]string{"error": err.Error()})
 	case errors.Is(err, ErrInstancePaused):
 		return c.JSON(http.StatusConflict, map[string]string{"error": err.Error()})
 	default:

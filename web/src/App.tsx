@@ -3,6 +3,7 @@ import {
   Activity,
   BookOpen,
   Bot,
+  Brain,
   CheckSquare,
   Cloud,
   Cpu,
@@ -54,6 +55,7 @@ import { DiskDoctorTab } from './components/DiskDoctorTab';
 import { DocsTab } from './components/DocsTab';
 import { FlowsTab } from './components/FlowsTab';
 import { FreeModelsTab } from './components/FreeModelsTab';
+import { MemVaultTab } from './components/MemVaultTab';
 import { ObservatoryTab } from './components/ObservatoryTab';
 import { OverviewTab } from './components/OverviewTab';
 import { ProjectsTab } from './components/ProjectsTab';
@@ -82,7 +84,8 @@ type NavTabId =
   | 'blueprints'
   | 'vault-env'
   | 'desktop'
-  | 'disk-doctor';
+  | 'disk-doctor'
+  | 'memvault';
 
 interface NavTabMeta {
   id: NavTabId;
@@ -109,6 +112,7 @@ const NAV_TABS: NavTabMeta[] = [
   { id: 'vault-env', sceneNum: '15', stageName: 'SECRETS', icon: KeyRound },
   { id: 'desktop', sceneNum: '16', stageName: 'DESKTOP', icon: Laptop },
   { id: 'disk-doctor', sceneNum: '17', stageName: 'DISK', icon: HardDrive },
+  { id: 'memvault', sceneNum: '18', stageName: 'MEMORY', icon: Brain },
 ];
 
 export function App() {
@@ -677,6 +681,10 @@ export function App() {
 
         {activeTab === 'disk-doctor' ? (
           <DiskDoctorTab onNotify={pushNotice} />
+        ) : null}
+
+        {activeTab === 'memvault' ? (
+          <MemVaultTab onNotify={pushNotice} />
         ) : null}
       </main>
 

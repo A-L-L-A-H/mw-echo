@@ -559,3 +559,96 @@ func TestProviderAPIKeysEncryptedAtRestAndNeverLeaked(t *testing.T) {
 		t.Fatalf("DELETE /api/ai/providers/:id failed: %d %s", delRec.Code, delRec.Body.String())
 	}
 }
+
+func TestCavemanCompressionAndHeaderMode(t *testing.T) {
+	verbosePrompt := strings.Join([]string{
+		"Halo, selamat pagi! Tolong bantu saya sebenarnya pada dasarnya ini adalah sebuah permintaan yang sangat panjang sekali dong deh nih sih.",
+		"Could you please kindly help me actually basically literally refactor the very verbose configuration object that is really quite simple?",
+		"{",
+		"    \"service\": \"mw-echo\",",
+		"    \"mode\": \"caveman\",",
+		"    \"retries\": 3,",
+		"    \"endpoints\": [",
+		"        \"/v1/chat/completions\",",
+		"        \"/api/radar/extract-markdown\"",
+		"    ]",
+		"}",
+		"Thank you very much! Terima kasih banyak ya!",
+	}, "\n")
+
+	rawTokens := len(verbosePrompt) / 4
+	compressedMsgs, savedTokens := aigateway.CompressCaveman([]aigateway.ChatMessage{
+		{Role: "user", Content: verbosePrompt},
+	})
+	if len(compressedMsgs) != 1 {
+		t.Fatalf("expected 1 compressed message, got %d", len(compressedMsgs))
+	}
+	compressedText, ok := compressedMsgs[0].Content.(string)
+	if !ok {
+		t.Fatalf("expected string content")
+	}
+	if savedTokens <= 0 {
+		t.Fatalf("expected positive token savings from CompressCaveman, got %d", savedTokens)
+	}
+	savingsPct := float64(savedTokens) / float64(rawTokens) * 100.0
+	if savingsPct < 30.0 {
+		t.Fatalf("expected >=30%% token savings in caveman mode, got %.1f%% (saved=%d raw=%d, out=%q)", savingsPct, savedTokens, rawTokens, compressedText)
+	}
+	if !strings.Contains(compressedText, `{"service":"mw-echo"`) {
+		t.Fatalf("expected compacted JSON in caveman output, got: %q", compressedText)
+	}
+
+	// Verify HTTP header X-MW-RTK-Mode: caveman and query ?rtk=caveman activate CompressCaveman.
+	_, gw, app := setupTestGateway(t)
+	var receivedPrompt string
+	mockUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body aigateway.ChatCompletionRequest
+		if err := json.NewDecoder(r.Body).Decode(&body); err == nil && len(body.Messages) > 0 {
+			if text, isStr := body.Messages[0].Content.(string); isStr {
+				receivedPrompt = text
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"chatcmpl-caveman","object":"chat.completion","model":"mock-caveman","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":20,"completion_tokens":2,"total_tokens":22}}`))
+	}))
+	defer mockUpstream.Close()
+
+	_, err := gw.AddProvider(context.Background(), aigateway.ProviderCreateInput{
+		Name:         "caveman-mock",
+		Kind:         aigateway.KindOpenAICompat,
+		Tier:         aigateway.TierFree,
+		BaseURL:      mockUpstream.URL,
+		DefaultModel: "mock-caveman",
+		Models:       []string{"mock-caveman"},
+	})
+	if err != nil {
+		t.Fatalf("add provider: %v", err)
+	}
+
+	reqBody := aigateway.ChatCompletionRequest{
+		Model:    "mock-caveman",
+		Messages: []aigateway.ChatMessage{{Role: "user", Content: verbosePrompt}},
+	}
+	recHeader := doJSONRequest(t, app, http.MethodPost, "/v1/chat/completions", reqBody, map[string]string{
+		"X-MW-RTK-Mode": "caveman",
+	})
+	if recHeader.Code != http.StatusOK {
+		t.Fatalf("expected 200 for caveman header request, got %d: %s", recHeader.Code, recHeader.Body.String())
+	}
+	savedHeader := recHeader.Header().Get("X-MW-Echo-RTK-Saved")
+	if savedHeader == "" || savedHeader == "0" {
+		t.Fatalf("expected non-zero X-MW-Echo-RTK-Saved header, got %q", savedHeader)
+	}
+	if len(receivedPrompt) >= len(verbosePrompt) {
+		t.Fatalf("expected upstream prompt to be compressed, raw=%d sent=%d", len(verbosePrompt), len(receivedPrompt))
+	}
+
+	// Query param ?rtk=caveman should also work.
+	recQuery := doJSONRequest(t, app, http.MethodPost, "/v1/chat/completions?rtk=caveman", reqBody, nil)
+	if recQuery.Code != http.StatusOK {
+		t.Fatalf("expected 200 for ?rtk=caveman request, got %d: %s", recQuery.Code, recQuery.Body.String())
+	}
+	if savedQ := recQuery.Header().Get("X-MW-Echo-RTK-Saved"); savedQ == "" || savedQ == "0" {
+		t.Fatalf("expected non-zero X-MW-Echo-RTK-Saved header for query mode, got %q", savedQ)
+	}
+}

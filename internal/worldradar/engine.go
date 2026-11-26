@@ -13,6 +13,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,6 +37,7 @@ type Options struct {
 	GatewayURL    string
 	HTTPClient    *http.Client
 	GitHubAPIBase string
+	NexusURL      string
 }
 
 // Engine executes the R!OTS World Radar Network intelligence cycle on top of HubStore.
@@ -44,6 +46,7 @@ type Engine struct {
 	gatewayURL    string
 	httpClient    *http.Client
 	githubAPIBase string
+	nexusURL      string
 	connectors    *ConnectorRegistry
 
 	schedMu      sync.Mutex
@@ -312,12 +315,17 @@ func NewEngine(hub *store.HubStore, opts Options) (*Engine, error) {
 	if githubBase == "" {
 		githubBase = "https://api.github.com"
 	}
+	nexusURL := strings.TrimSpace(opts.NexusURL)
+	if nexusURL == "" {
+		nexusURL = strings.TrimSpace(os.Getenv("MW_NEXUS_URL"))
+	}
 	schedCtx, schedCancel := context.WithCancel(context.Background())
 	eng := &Engine{
 		hub:           hub,
 		gatewayURL:    strings.TrimSpace(opts.GatewayURL),
 		httpClient:    client,
 		githubAPIBase: githubBase,
+		nexusURL:      nexusURL,
 		connectors:    NewConnectorRegistry(),
 		schedCtx:      schedCtx,
 		schedCancel:   schedCancel,
@@ -932,6 +940,17 @@ VALUES (?, ?, ?, ?, ?)`,
 	if linkErr != nil {
 		return "", fmt.Errorf("link event evidence: %w", linkErr)
 	}
+
+	e.pushEventToNexusAsync(NexusEventPayload{
+		EventID:       existingID,
+		Title:         rec.Title,
+		Summary:       rec.Summary,
+		PrimaryDomain: primaryDomain,
+		ClusterKey:    clusterKey,
+		SourceURI:     firstNonEmpty(strings.TrimSpace(rec.SourceURI), target.SourceURI),
+		OccurredAt:    occurredAt,
+		Domains:       domains,
+	})
 	return existingID, nil
 }
 
