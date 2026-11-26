@@ -505,3 +505,88 @@ func TestWorldRadarAndStorageBackupRoutes(t *testing.T) {
 		t.Fatalf("expected vault_backup XP event in /api/game/feed, got %d %s", feedRec.Code, feedRec.Body.String())
 	}
 }
+
+func TestFlowsBlueprintsAndExpandedMCPRoutes(t *testing.T) {
+	_, handler := setupTestEcho(t, "")
+
+	// 1. Seeded starter flows on GET /api/flows
+	flowsRec := httptest.NewRecorder()
+	handler.ServeHTTP(flowsRec, httptest.NewRequest(http.MethodGet, "/api/flows", nil))
+	if flowsRec.Code != http.StatusOK ||
+		!strings.Contains(flowsRec.Body.String(), "flow-starter-radar-brief") ||
+		!strings.Contains(flowsRec.Body.String(), "flow-starter-9drive-snapshot") {
+		t.Fatalf("GET /api/flows missing seeded starters: %d %s", flowsRec.Code, flowsRec.Body.String())
+	}
+
+	// 2. Create, run (task creation), and list runs for a flow
+	createFlowBody := `{
+		"id":"flow-test-task",
+		"name":"Test Task Flow",
+		"triggerKind":"manual",
+		"actionTier":"A1",
+		"enabled":true,
+		"approved":true,
+		"steps":[{"id":"s1","kind":"create_task","config":{"project":"echo","code":"FLOW-1","title":"Verify {{trigger}}","priority":"p1"}}]
+	}`
+	createFlowReq := httptest.NewRequest(http.MethodPost, "/api/flows", strings.NewReader(createFlowBody))
+	createFlowReq.Header.Set("Content-Type", "application/json")
+	createFlowRec := httptest.NewRecorder()
+	handler.ServeHTTP(createFlowRec, createFlowReq)
+	if createFlowRec.Code != http.StatusCreated {
+		t.Fatalf("POST /api/flows expected 201, got %d %s", createFlowRec.Code, createFlowRec.Body.String())
+	}
+
+	runFlowReq := httptest.NewRequest(http.MethodPost, "/api/flows/flow-test-task/run", strings.NewReader(`{"triggerPayload":"wave-d1"}`))
+	runFlowReq.Header.Set("Content-Type", "application/json")
+	runFlowRec := httptest.NewRecorder()
+	handler.ServeHTTP(runFlowRec, runFlowReq)
+	if runFlowRec.Code != http.StatusOK || !strings.Contains(runFlowRec.Body.String(), `"status":"ok"`) {
+		t.Fatalf("POST /api/flows/flow-test-task/run failed: %d %s", runFlowRec.Code, runFlowRec.Body.String())
+	}
+
+	runsRec := httptest.NewRecorder()
+	handler.ServeHTTP(runsRec, httptest.NewRequest(http.MethodGet, "/api/flows/flow-test-task/runs", nil))
+	if runsRec.Code != http.StatusOK || !strings.Contains(runsRec.Body.String(), `"count":1`) {
+		t.Fatalf("GET /api/flows/flow-test-task/runs failed: %d %s", runsRec.Code, runsRec.Body.String())
+	}
+
+	// 3. Curated PaaS blueprints + FTS5 search + compose YAML
+	bpRec := httptest.NewRecorder()
+	handler.ServeHTTP(bpRec, httptest.NewRequest(http.MethodGet, "/api/blueprints?q=postgres", nil))
+	if bpRec.Code != http.StatusOK || !strings.Contains(bpRec.Body.String(), "curated:postgres-16") {
+		t.Fatalf("GET /api/blueprints?q=postgres failed: %d %s", bpRec.Code, bpRec.Body.String())
+	}
+
+	composeRec := httptest.NewRecorder()
+	handler.ServeHTTP(composeRec, httptest.NewRequest(http.MethodGet, "/api/blueprints/curated:mw-echo/compose", nil))
+	if composeRec.Code != http.StatusOK || !strings.Contains(composeRec.Body.String(), "ghcr.io/a-l-l-a-h/mw-echo:latest") {
+		t.Fatalf("GET /api/blueprints/curated:mw-echo/compose failed: %d %s", composeRec.Code, composeRec.Body.String())
+	}
+
+	// 4. MCP tools/list + echo_search_blueprints + echo_run_flow
+	mcpListReq := httptest.NewRequest(http.MethodPost, "/api/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":10,"method":"tools/list"}`))
+	mcpListReq.Header.Set("Content-Type", "application/json")
+	mcpListRec := httptest.NewRecorder()
+	handler.ServeHTTP(mcpListRec, mcpListReq)
+	if mcpListRec.Code != http.StatusOK ||
+		!strings.Contains(mcpListRec.Body.String(), "echo_search_blueprints") ||
+		!strings.Contains(mcpListRec.Body.String(), "echo_run_flow") {
+		t.Fatalf("MCP tools/list missing blueprints/flow tools: %d %s", mcpListRec.Code, mcpListRec.Body.String())
+	}
+
+	mcpBPReq := httptest.NewRequest(http.MethodPost, "/api/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"echo_search_blueprints","arguments":{"query":"garage"}}}`))
+	mcpBPReq.Header.Set("Content-Type", "application/json")
+	mcpBPRec := httptest.NewRecorder()
+	handler.ServeHTTP(mcpBPRec, mcpBPReq)
+	if mcpBPRec.Code != http.StatusOK || !strings.Contains(mcpBPRec.Body.String(), "garage-s3") {
+		t.Fatalf("MCP echo_search_blueprints failed: %d %s", mcpBPRec.Code, mcpBPRec.Body.String())
+	}
+
+	mcpFlowReq := httptest.NewRequest(http.MethodPost, "/api/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"echo_run_flow","arguments":{"id":"flow-test-task","triggerPayload":"mcp-run"}}}`))
+	mcpFlowReq.Header.Set("Content-Type", "application/json")
+	mcpFlowRec := httptest.NewRecorder()
+	handler.ServeHTTP(mcpFlowRec, mcpFlowReq)
+	if mcpFlowRec.Code != http.StatusOK || !strings.Contains(mcpFlowRec.Body.String(), "FLOW-1") || !strings.Contains(mcpFlowRec.Body.String(), "mcp-run") {
+		t.Fatalf("MCP echo_run_flow failed: %d %s", mcpFlowRec.Code, mcpFlowRec.Body.String())
+	}
+}

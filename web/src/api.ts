@@ -231,6 +231,12 @@ export interface StorageListResponse {
   count: number;
 }
 
+export interface StorageBackupResponse {
+  backedUp: PooledStorageObject[];
+  count: number;
+  timestamp?: string;
+}
+
 // --- Observatory (OTLP + Host Discovery + Local Git Repo Radar) ---
 
 export interface ObservatoryStats {
@@ -810,6 +816,124 @@ export interface RadarFeedbackInput {
   reason: string;
 }
 
+// --- Flows Automation Engine (13 FLOWS) ---
+
+export type FlowTriggerKind = 'manual' | 'interval' | 'radar_event' | 'whatsapp_msg' | string;
+export type FlowActionTier = 'A0' | 'A1' | 'A2' | 'A3' | string;
+export type FlowStepKind =
+  | 'radar_run'
+  | 'ai_prompt'
+  | 'create_task'
+  | 'send_whatsapp'
+  | 'send_webhook'
+  | 'backup_9drive'
+  | string;
+
+export interface FlowStep {
+  id: string;
+  kind: FlowStepKind;
+  config: Record<string, string>;
+}
+
+export interface FlowRecord {
+  id: string;
+  name: string;
+  description: string;
+  triggerKind: FlowTriggerKind;
+  triggerConfigJson: string;
+  steps: FlowStep[];
+  actionTier: FlowActionTier;
+  enabled: boolean;
+  approved: boolean;
+  lastRunAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlowsListResponse {
+  flows: FlowRecord[];
+  count: number;
+}
+
+export interface FlowCreateInput {
+  name: string;
+  description: string;
+  triggerKind: FlowTriggerKind;
+  triggerConfigJson?: string;
+  steps: FlowStep[];
+  actionTier: FlowActionTier;
+}
+
+export interface FlowPatchInput {
+  enabled?: boolean;
+  approved?: boolean;
+  name?: string;
+  steps?: FlowStep[];
+  actionTier?: FlowActionTier;
+}
+
+export interface FlowRunRecord {
+  id: string;
+  flowId: string;
+  status: 'ok' | 'error' | 'blocked' | string;
+  triggerPayload: string;
+  outputJson: string;
+  stepLogsJson: string;
+  startedAt: string;
+  finishedAt: string;
+}
+
+export interface FlowRunsListResponse {
+  runs: FlowRunRecord[];
+  count: number;
+}
+
+// --- PaaS Blueprints Armory (14 PACKS) ---
+
+export type BlueprintSourceFilter = 'all' | 'curated' | 'dokploy' | 'coolify' | 'bigbear' | string;
+
+export interface BlueprintRecord {
+  id: string;
+  source: string;
+  slug: string;
+  name: string;
+  category: string;
+  description: string;
+  version: string;
+  composeYaml: string;
+  tags: string[];
+  sourceUrl: string;
+  updatedAt: string;
+}
+
+export interface BlueprintSourceStatus {
+  source: string;
+  repo: string;
+  lastSha: string;
+  lastSniffAt: string;
+  itemsCount: number;
+}
+
+export interface BlueprintsListResponse {
+  blueprints: BlueprintRecord[];
+  count: number;
+  sources: BlueprintSourceStatus[];
+}
+
+export interface BlueprintSniffSourceResult {
+  source: string;
+  repo?: string;
+  sha?: string;
+  indexed?: number;
+  error?: string;
+  skipped?: boolean;
+}
+
+export interface BlueprintsSniffResponse {
+  results: BlueprintSniffSourceResult[];
+  totalBlueprints: number;
+}
+
 // --- AI Gateway (Bifrost + 9Router + Magpie + FreeLLMAPI) ---
 
 export type AiProviderKind = 'openai_compat' | 'anthropic' | 'gemini' | string;
@@ -1221,6 +1345,24 @@ export function deleteStorageObject(objectId: string): Promise<{ deleted: boolea
   return requestJson<{ deleted: boolean }>(`/api/storage/${encodeURIComponent(objectId)}`, {
     method: 'DELETE',
   });
+}
+
+export async function backupDatabasesToVault(): Promise<StorageBackupResponse> {
+  const rawPayload = await requestJson<unknown>('/api/storage/backup', {
+    method: 'POST',
+  });
+  const rec = asRecord(rawPayload);
+  const rawList = Array.isArray(rec.backedUp)
+    ? rec.backedUp
+    : Array.isArray(rec.backups)
+      ? rec.backups
+      : [];
+  const backedUp = rawList as PooledStorageObject[];
+  return {
+    backedUp,
+    count: pickNumber(rec, ['count'], backedUp.length),
+    timestamp: pickString(rec, ['timestamp']) || undefined,
+  };
 }
 
 // --- Observatory (OTLP + Host Discovery + Local Git Repo Radar) ---
@@ -1944,5 +2086,230 @@ export async function sendChatCompletionTest(
     rtkSavedTokens: rawHeaders['x-mw-echo-rtk-saved'] || '0',
     rawHeaders,
     rawPayload: bodyRecord,
+  };
+}
+
+// --- Flows Automation Engine (13 FLOWS) ---
+
+function normalizeFlowStep(rawStep: unknown, index: number): FlowStep {
+  const rec = asRecord(rawStep);
+  const rawConfig = asRecord(rec.config);
+  const normalizedConfig: Record<string, string> = {};
+  for (const [cfgKey, cfgVal] of Object.entries(rawConfig)) {
+    if (cfgVal !== undefined && cfgVal !== null) {
+      normalizedConfig[cfgKey] = String(cfgVal);
+    }
+  }
+  return {
+    id: pickString(rec, ['id'], `step-${index + 1}`),
+    kind: pickString(rec, ['kind'], 'ai_prompt'),
+    config: normalizedConfig,
+  };
+}
+
+function normalizeFlowRecord(rawFlow: unknown): FlowRecord {
+  const rec = asRecord(rawFlow);
+  let rawSteps: unknown[] = [];
+  if (Array.isArray(rec.steps)) {
+    rawSteps = rec.steps;
+  } else if (typeof rec.stepsJson === 'string' && rec.stepsJson.trim().length > 0) {
+    try {
+      const parsedSteps = JSON.parse(rec.stepsJson);
+      if (Array.isArray(parsedSteps)) {
+        rawSteps = parsedSteps;
+      }
+    } catch {
+      rawSteps = [];
+    }
+  }
+
+  let triggerConfigJson = '{}';
+  if (typeof rec.triggerConfigJson === 'string' && rec.triggerConfigJson.trim().length > 0) {
+    triggerConfigJson = rec.triggerConfigJson;
+  } else if (rec.triggerConfig !== undefined && rec.triggerConfig !== null) {
+    triggerConfigJson = JSON.stringify(rec.triggerConfig);
+  }
+
+  return {
+    id: pickString(rec, ['id']),
+    name: pickString(rec, ['name'], 'Untitled Flow'),
+    description: pickString(rec, ['description']),
+    triggerKind: pickString(rec, ['triggerKind', 'trigger_kind'], 'manual'),
+    triggerConfigJson,
+    steps: rawSteps.map((stepObj, idx) => normalizeFlowStep(stepObj, idx)),
+    actionTier: pickString(rec, ['actionTier', 'action_tier'], 'A1'),
+    enabled: pickBoolean(rec, ['enabled'], false),
+    approved: pickBoolean(rec, ['approved'], false),
+    lastRunAt: pickString(rec, ['lastRunAt', 'last_run_at']),
+    createdAt: pickString(rec, ['createdAt', 'created_at']),
+    updatedAt: pickString(rec, ['updatedAt', 'updated_at']),
+  };
+}
+
+function normalizeFlowRunRecord(rawRun: unknown): FlowRunRecord {
+  const rec = asRecord(rawRun);
+  return {
+    id: pickString(rec, ['id']),
+    flowId: pickString(rec, ['flowId', 'flow_id']),
+    status: pickString(rec, ['status'], 'ok'),
+    triggerPayload: pickString(rec, ['triggerPayload', 'trigger_payload']),
+    outputJson: pickString(rec, ['outputJson', 'output_json']),
+    stepLogsJson: pickString(rec, ['stepLogsJson', 'step_logs_json']),
+    startedAt: pickString(rec, ['startedAt', 'started_at']),
+    finishedAt: pickString(rec, ['finishedAt', 'finished_at']),
+  };
+}
+
+export async function fetchFlows(): Promise<FlowsListResponse> {
+  const rawReply = await requestJson<unknown>('/api/flows');
+  const rec = asRecord(rawReply);
+  const rawList = Array.isArray(rec.flows) ? rec.flows : Array.isArray(rawReply) ? rawReply : [];
+  const flows = rawList.map(normalizeFlowRecord);
+  return {
+    flows,
+    count: pickNumber(rec, ['count'], flows.length),
+  };
+}
+
+export async function createFlow(payload: FlowCreateInput): Promise<FlowRecord> {
+  const rawReply = await requestJson<unknown>('/api/flows', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return normalizeFlowRecord(rawReply);
+}
+
+export async function patchFlow(flowId: string, patch: FlowPatchInput): Promise<FlowRecord> {
+  const rawReply = await requestJson<unknown>(`/api/flows/${encodeURIComponent(flowId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  return normalizeFlowRecord(rawReply);
+}
+
+export function deleteFlow(flowId: string): Promise<{ deleted: boolean }> {
+  return requestJson<{ deleted: boolean }>(`/api/flows/${encodeURIComponent(flowId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function runFlow(flowId: string, triggerPayload = ''): Promise<FlowRunRecord> {
+  const rawReply = await requestJson<unknown>(`/api/flows/${encodeURIComponent(flowId)}/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(triggerPayload ? { triggerPayload } : {}),
+  });
+  return normalizeFlowRunRecord(rawReply);
+}
+
+export async function fetchFlowRuns(flowId: string): Promise<FlowRunsListResponse> {
+  const rawReply = await requestJson<unknown>(`/api/flows/${encodeURIComponent(flowId)}/runs`);
+  const rec = asRecord(rawReply);
+  const rawList = Array.isArray(rec.runs) ? rec.runs : Array.isArray(rawReply) ? rawReply : [];
+  const runs = rawList.map(normalizeFlowRunRecord);
+  return {
+    runs,
+    count: pickNumber(rec, ['count'], runs.length),
+  };
+}
+
+// --- PaaS Blueprints Armory (14 PACKS) ---
+
+function normalizeBlueprintRecord(rawBlueprint: unknown): BlueprintRecord {
+  const rec = asRecord(rawBlueprint);
+  let tagsList: string[] = [];
+  if (Array.isArray(rec.tags)) {
+    tagsList = rec.tags.map(String).filter(Boolean);
+  } else if (typeof rec.tagsJson === 'string' && rec.tagsJson.trim().length > 0) {
+    try {
+      const parsedTags = JSON.parse(rec.tagsJson);
+      if (Array.isArray(parsedTags)) {
+        tagsList = parsedTags.map(String).filter(Boolean);
+      }
+    } catch {
+      tagsList = [];
+    }
+  }
+
+  return {
+    id: pickString(rec, ['id']),
+    source: pickString(rec, ['source'], 'curated'),
+    slug: pickString(rec, ['slug']),
+    name: pickString(rec, ['name'], 'Unnamed Blueprint'),
+    category: pickString(rec, ['category'], 'general'),
+    description: pickString(rec, ['description']),
+    version: pickString(rec, ['version'], 'latest'),
+    composeYaml: pickString(rec, ['composeYaml', 'compose_yaml']),
+    tags: tagsList,
+    sourceUrl: pickString(rec, ['sourceUrl', 'source_url']),
+    updatedAt: pickString(rec, ['updatedAt', 'updated_at']),
+  };
+}
+
+function normalizeBlueprintSource(rawSource: unknown): BlueprintSourceStatus {
+  const rec = asRecord(rawSource);
+  return {
+    source: pickString(rec, ['source']),
+    repo: pickString(rec, ['repo']),
+    lastSha: pickString(rec, ['lastSha', 'last_sha']),
+    lastSniffAt: pickString(rec, ['lastSniffAt', 'last_sniff_at']),
+    itemsCount: pickNumber(rec, ['itemsCount', 'items_count'], 0),
+  };
+}
+
+export async function fetchBlueprints(filters: {
+  query?: string;
+  source?: string;
+  category?: string;
+  limit?: number;
+} = {}): Promise<BlueprintsListResponse> {
+  const params = new URLSearchParams();
+  if (filters.query?.trim()) params.set('q', filters.query.trim());
+  if (filters.source?.trim() && filters.source !== 'all') params.set('source', filters.source.trim());
+  if (filters.category?.trim()) params.set('category', filters.category.trim());
+  params.set('limit', String(filters.limit ?? 100));
+
+  const rawReply = await requestJson<unknown>(`/api/blueprints?${params.toString()}`);
+  const rec = asRecord(rawReply);
+  const rawList = Array.isArray(rec.blueprints) ? rec.blueprints : [];
+  const rawSources = Array.isArray(rec.sources) ? rec.sources : [];
+  const blueprints = rawList.map(normalizeBlueprintRecord);
+  const sources = rawSources.map(normalizeBlueprintSource);
+  return {
+    blueprints,
+    count: pickNumber(rec, ['count'], blueprints.length),
+    sources,
+  };
+}
+
+export async function fetchBlueprintById(blueprintId: string): Promise<BlueprintRecord> {
+  const rawReply = await requestJson<unknown>(
+    `/api/blueprints/${encodeURIComponent(blueprintId)}`,
+  );
+  return normalizeBlueprintRecord(rawReply);
+}
+
+export async function sniffBlueprintsCatalogs(): Promise<BlueprintsSniffResponse> {
+  const rawReply = await requestJson<unknown>('/api/blueprints/sniff', {
+    method: 'POST',
+  });
+  const rec = asRecord(rawReply);
+  const rawResults = Array.isArray(rec.results) ? rec.results : [];
+  const results: BlueprintSniffSourceResult[] = rawResults.map((entry) => {
+    const entryRec = asRecord(entry);
+    return {
+      source: pickString(entryRec, ['source'], 'unknown'),
+      repo: pickString(entryRec, ['repo']) || undefined,
+      sha: pickString(entryRec, ['sha', 'lastSha']) || undefined,
+      indexed: pickNumber(entryRec, ['indexed', 'itemsCount'], 0),
+      error: pickString(entryRec, ['error']) || undefined,
+      skipped: pickBoolean(entryRec, ['skipped'], false),
+    };
+  });
+  return {
+    results,
+    totalBlueprints: pickNumber(rec, ['totalBlueprints', 'total_blueprints'], 0),
   };
 }

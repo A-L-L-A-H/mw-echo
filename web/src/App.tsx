@@ -11,10 +11,12 @@ import {
   Globe2,
   LayoutDashboard,
   MessageSquare,
+  Package,
   Radar,
   Radio,
   Terminal,
   Trophy,
+  Workflow,
 } from 'lucide-react';
 import {
   fetchAiAgents,
@@ -42,8 +44,10 @@ import {
 } from './api';
 import { AiGatewayTab, type ProviderDraftPrefill } from './components/AiGatewayTab';
 import { ArenaTab } from './components/ArenaTab';
+import { BlueprintsTab } from './components/BlueprintsTab';
 import { CoderTab } from './components/CoderTab';
 import { DocsTab } from './components/DocsTab';
+import { FlowsTab } from './components/FlowsTab';
 import { FreeModelsTab } from './components/FreeModelsTab';
 import { ObservatoryTab } from './components/ObservatoryTab';
 import { OverviewTab } from './components/OverviewTab';
@@ -67,7 +71,9 @@ type NavTabId =
   | 'docs'
   | 'coder'
   | 'arena'
-  | 'world-radar';
+  | 'world-radar'
+  | 'flows'
+  | 'blueprints';
 
 interface NavTabMeta {
   id: NavTabId;
@@ -89,6 +95,8 @@ const NAV_TABS: NavTabMeta[] = [
   { id: 'coder', sceneNum: '10', stageName: 'CODER', icon: Terminal },
   { id: 'arena', sceneNum: '11', stageName: 'ARENA', icon: Trophy },
   { id: 'world-radar', sceneNum: '12', stageName: 'WORLD', icon: Globe2 },
+  { id: 'flows', sceneNum: '13', stageName: 'FLOWS', icon: Workflow },
+  { id: 'blueprints', sceneNum: '14', stageName: 'PACKS', icon: Package },
 ];
 
 export function App() {
@@ -360,7 +368,7 @@ export function App() {
                 [REC ● 24FPS]
               </span>
               <span className="text-[#ffe031]">
-                SCENE {activeStageMeta.sceneNum}/12 :: {activeStageMeta.stageName}
+                SCENE {activeStageMeta.sceneNum}/14 :: {activeStageMeta.stageName}
               </span>
               <span className="hidden items-center gap-1 text-[#a3ff12] xl:inline-flex">
                 <Activity className="h-3.5 w-3.5" />
@@ -623,6 +631,25 @@ export function App() {
         {activeTab === 'world-radar' ? (
           <WorldRadarTab onNotify={pushNotice} />
         ) : null}
+
+        {activeTab === 'flows' ? (
+          <FlowsTab
+            onNotify={pushNotice}
+            onHubMutated={async () => {
+              await Promise.all([
+                reloadHubCore(),
+                reloadProjects(),
+                reloadStorage(),
+                reloadWhatsApp(),
+                reloadGameProfile(),
+              ]);
+            }}
+          />
+        ) : null}
+
+        {activeTab === 'blueprints' ? (
+          <BlueprintsTab onNotify={pushNotice} />
+        ) : null}
       </main>
 
       {/* Bottom Cinema Letterbox Footer */}
@@ -631,10 +658,10 @@ export function App() {
           <div className="flex flex-wrap items-center gap-2">
             <MonoBadge tone="yellow">MW//ECHO</MonoBadge>
             <span>
-              GO ECHO · WORLD RADAR · ARENA XP · SHADOW SIDEKICK · CODER · GOWA · FTS5 · BIFROST/MAGPIE/9ROUTER · 9DRIVE
+              GO ECHO · FLOWS · PACKS · WORLD RADAR · ARENA XP · SHADOW SIDEKICK · CODER · GOWA · FTS5 · BIFROST/MAGPIE/9ROUTER · 9DRIVE
             </span>
           </div>
-          <span className="text-[#ff2e88]">ISSUE #12 // RIOT &amp; CHAOS COCKPIT</span>
+          <span className="text-[#ff2e88]">ISSUE #14 // RIOT &amp; CHAOS COCKPIT</span>
         </div>
       </footer>
 

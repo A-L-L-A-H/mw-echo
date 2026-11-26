@@ -11,6 +11,8 @@ Single-binary **Go + Echo v4 + React Vite + SQLite FTS5** local control hub for 
 - **Gamification Arena** (XP, ranks, streaks, combo multipliers, daily quests, badges, & boss milestones fueled by real hub activity)
 - **Shadow Sidekick** (Multi-persona AI assistant with daily briefs, WhatsApp send, coding-mission dispatch, & XP integration)
 - **World Radar (`12 WORLD`)** (R!OTS World Radar Network across 23 domains `D01`–`D23`, analytical lenses, Alpha Radar Packs, watch targets, event clustering, & epistemic reports)
+- **Automation Flows (`13 FLOWS`)** (Multi-step sequential pipelines with `{{prev}}`/`{{trigger}}` interpolation, interval scheduler, `radar_event`/`whatsapp_msg` triggers, and `A0`–`A3` action governance)
+- **PaaS Blueprint Armory (`14 PACKS`)** (Curated self-hosted Docker Compose catalog + FTS5 search + live GitHub upstream sniffer for Dokploy, Coolify, & BigBear CasaOS)
 - **MCP JSON-RPC 2.0** (`POST /api/mcp`)
 
 ## Quick Start (Windows)
@@ -67,7 +69,9 @@ $env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://127.0.0.1:4310"
 - Gamification Arena: `GET /api/game/profile`, `GET /api/game/feed`, `POST /api/game/quests/:id/claim`
 - Shadow Sidekick: `GET /api/assistant/personas`, `GET/DELETE /api/assistant/history`, `POST /api/assistant/chat`, `POST /api/assistant/brief`
 - World Radar (`12 WORLD`): `GET /api/radar/domains`, `GET /api/radar/lenses`, `GET /api/radar/packs`, `POST /api/radar/packs/:packId/install`, `GET/POST /api/radar/instances`, `POST /api/radar/instances/:id/run`, `GET /api/radar/events`, `GET /api/radar/alerts`, `GET/POST /api/radar/reports`, `GET /api/radar/sources/health`
-- Repo Importer & MCP: `POST /api/import/repo`, `POST /api/mcp` (`echo_radar_events`, `echo_radar_run`, Docs, Tasks, Storage, Projects, WhatsApp)
+- Automation Flows (`13 FLOWS`): `GET/POST /api/flows`, `PATCH/DELETE /api/flows/:id`, `POST /api/flows/:id/run`, `GET /api/flows/:id/runs`
+- PaaS Blueprint Armory (`14 PACKS`): `GET /api/blueprints`, `GET /api/blueprints/:id`, `GET /api/blueprints/:id/compose`, `POST /api/blueprints/sniff`
+- Repo Importer & MCP: `POST /api/import/repo`, `POST /api/mcp` (`echo_radar_events`, `echo_radar_run`, `echo_search_blueprints`, `echo_run_flow`, Docs, Tasks, Storage, Projects, WhatsApp)
 
 ## Env Vars
 

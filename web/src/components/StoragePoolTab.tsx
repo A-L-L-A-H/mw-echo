@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import {
+  CheckCircle2,
   Cloud,
   Database,
   Download,
@@ -8,11 +9,14 @@ import {
   RefreshCw,
   Search,
   Server,
+  ShieldCheck,
   Trash2,
   Upload,
+  X,
 } from 'lucide-react';
 import {
   addStorageProvider,
+  backupDatabasesToVault,
   deleteStorageObject,
   deleteStorageProvider,
   startGDriveOAuth,
@@ -22,10 +26,11 @@ import {
   type PoolSummary,
   type PooledStorageObject,
   type RoutingPolicy,
+  type StorageBackupResponse,
   type StorageProviderRecord,
 } from '../api';
 import { computeUsagePercent, formatBytes, formatShortTime } from '../utils';
-import { MonoBadge, SectionCard, StageHeroBanner, StatTile } from './UiPrimitives';
+import { ComicSticker, MonoBadge, SectionCard, StageHeroBanner, StatTile } from './UiPrimitives';
 
 interface StoragePoolTabProps {
   poolSummary: PoolSummary | null;
@@ -74,6 +79,8 @@ export function StoragePoolTab({
   const [uploadProviderId, setUploadProviderId] = useState('');
   const [uploadingFile, setUploadingFile] = useState(false);
   const [objectSearch, setObjectSearch] = useState('');
+  const [backingUpVault, setBackingUpVault] = useState(false);
+  const [backupConfirmation, setBackupConfirmation] = useState<StorageBackupResponse | null>(null);
 
   const providers = poolSummary?.providers ?? [];
   const totalQuota = poolSummary?.totalQuotaBytes ?? 0;
@@ -260,6 +267,31 @@ export function StoragePoolTab({
     }
   };
 
+  const handleBackupVault = async () => {
+    setBackingUpVault(true);
+    try {
+      const backupReply = await backupDatabasesToVault();
+      setBackupConfirmation(backupReply);
+      const backedNames =
+        backupReply.backedUp.length > 0
+          ? backupReply.backedUp
+              .map((storedFile) => storedFile.filename || storedFile.logicalPath)
+              .join(', ')
+          : 'mw-echo.db';
+      onNotify(
+        'ok',
+        `Backed up ${backupReply.count} SQLite snapshot${backupReply.count === 1 ? '' : 's'} to 9Drive Vault: ${backedNames}`,
+      );
+      await onReloadStorage(objectSearch);
+    } catch (caughtError) {
+      const message =
+        caughtError instanceof Error ? caughtError.message : '9Drive vault snapshot failed';
+      onNotify('err', message);
+    } finally {
+      setBackingUpVault(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <StageHeroBanner
@@ -269,16 +301,80 @@ export function StoragePoolTab({
         subtitle="STACK FREE 15 GB GOOGLE DRIVE ACCOUNTS + S3/R2/GARAGE BUCKETS — ZERO LOCAL DISK WASTE"
         tone="yellow"
         actions={
-          <button
-            type="button"
-            onClick={() => void onReloadStorage(objectSearch)}
-            className="riot-btn inline-flex items-center gap-1.5 bg-[#ffe031] px-4 py-2 font-mono text-xs font-extrabold text-[#08080c]"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            SYNC TANKS
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={backingUpVault}
+              onClick={() => void handleBackupVault()}
+              className="riot-btn inline-flex items-center gap-2 bg-[#ff2e88] px-4 py-2 font-display text-xs text-white uppercase hover:bg-[#a3ff12] hover:text-[#08080c] disabled:opacity-50"
+            >
+              <ShieldCheck className={`h-4 w-4 ${backingUpVault ? 'animate-pulse' : ''}`} />
+              {backingUpVault ? 'SNAPSHOTTING DB TO 9DRIVE...' : 'SNAPSHOT DB TO 9DRIVE VAULT'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void onReloadStorage(objectSearch)}
+              className="riot-btn inline-flex items-center gap-1.5 bg-[#ffe031] px-4 py-2 font-mono text-xs font-extrabold text-[#08080c]"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              SYNC TANKS
+            </button>
+          </div>
         }
       />
+
+      {backupConfirmation ? (
+        <div className="relative border-[2.5px] border-black bg-[#13131d] p-4 shadow-[6px_6px_0_#a3ff12]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <ComicSticker tone="ok" tilt="-rotate-2">
+                VAULT STAMPED!
+              </ComicSticker>
+              <span className="inline-flex items-center gap-1.5 font-display text-sm text-[#a3ff12] uppercase">
+                <CheckCircle2 className="h-4 w-4" />
+                {backupConfirmation.count} SQLITE SNAPSHOT
+                {backupConfirmation.count === 1 ? '' : 'S'} BACKED UP TO REMOTE POOL
+              </span>
+              {backupConfirmation.timestamp ? (
+                <MonoBadge tone="cream">{backupConfirmation.timestamp}</MonoBadge>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={() => setBackupConfirmation(null)}
+              className="riot-btn inline-flex items-center gap-1 bg-[#1b1b2b] px-2.5 py-1 font-mono text-[10px] font-extrabold text-[#fff6de]"
+              aria-label="Dismiss backup confirmation"
+            >
+              <X className="h-3.5 w-3.5" />
+              DISMISS
+            </button>
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+            {(backupConfirmation.backedUp ?? []).map((snapshotObj) => (
+              <div
+                key={snapshotObj.id || snapshotObj.logicalPath}
+                className="flex flex-wrap items-center justify-between gap-2 border-2 border-black bg-[#08080c] px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="truncate font-mono text-xs font-extrabold text-[#fff6de]">
+                    {snapshotObj.filename || snapshotObj.logicalPath}
+                  </div>
+                  <div className="truncate font-mono text-[10px] text-[#a6a2b8]">
+                    {snapshotObj.project}/{snapshotObj.logicalPath}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <MonoBadge tone="cyan">
+                    {snapshotObj.providerKind}:{snapshotObj.providerName}
+                  </MonoBadge>
+                  <MonoBadge tone="yellow">{formatBytes(snapshotObj.sizeBytes)}</MonoBadge>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {/* Fuel Tank Telemetry Stamps */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -19,7 +19,9 @@ import (
 
 	"github.com/A-L-L-A-H/mw-echo/internal/aigateway"
 	"github.com/A-L-L-A-H/mw-echo/internal/assistant"
+	"github.com/A-L-L-A-H/mw-echo/internal/blueprints"
 	"github.com/A-L-L-A-H/mw-echo/internal/codingagent"
+	"github.com/A-L-L-A-H/mw-echo/internal/flows"
 	"github.com/A-L-L-A-H/mw-echo/internal/gamification"
 	"github.com/A-L-L-A-H/mw-echo/internal/importer"
 	"github.com/A-L-L-A-H/mw-echo/internal/observatory"
@@ -156,50 +158,30 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 		panic("init coding agent: " + err.Error())
 	}
 
+	var flowEngine *flows.Engine
+
 	waMgr, err := whatsapp.NewManager(hub, whatsapp.Options{
 		BasicUser:            cfg.WAUser,
 		BasicPass:            cfg.WAPass,
 		DefaultWebhookURL:    cfg.WAWebhookURL,
 		DefaultWebhookSecret: cfg.WAWebhookSecret,
 		AutoReply: func(ctx context.Context, agentID, sender, text string) (string, error) {
-			reqPayload := map[string]any{
-				"messages": []map[string]string{
-					{"role": "system", "content": "You are a helpful WhatsApp auto-reply assistant for mw-echo. Answer briefly and clearly."},
-					{"role": "user", "content": fmt.Sprintf("From %s: %s", sender, text)},
-				},
+			if flowEngine != nil {
+				triggerPayload, _ := json.Marshal(map[string]string{
+					"agentId": agentID,
+					"sender":  sender,
+					"text":    text,
+				})
+				_, _ = flowEngine.DispatchTrigger(ctx, flows.TriggerWhatsAppMsg, string(triggerPayload))
 			}
-			encoded, _ := json.Marshal(reqPayload)
-			req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, internalGatewayURL, bytes.NewReader(encoded))
-			if reqErr != nil {
-				return "", reqErr
-			}
-			req.Header.Set("Content-Type", "application/json")
-			if strings.TrimSpace(agentID) != "" {
-				req.Header.Set("X-MW-Agent", strings.TrimSpace(agentID))
-			}
-			resp, doErr := internalClient.Do(req)
-			if doErr != nil {
-				return "", doErr
-			}
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			if resp.StatusCode >= 400 {
-				return "", fmt.Errorf("gateway auto-reply HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
-			}
-			var parsed struct {
-				Choices []struct {
-					Message struct {
-						Content string `json:"content"`
-					} `json:"message"`
-				} `json:"choices"`
-			}
-			if unmarshalErr := json.Unmarshal(bodyBytes, &parsed); unmarshalErr != nil {
-				return "", unmarshalErr
-			}
-			if len(parsed.Choices) == 0 {
-				return "", errors.New("empty auto-reply choice")
-			}
-			return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
+			return callInternalGatewayChat(
+				ctx,
+				internalClient,
+				internalGatewayURL,
+				agentID,
+				"You are a helpful WhatsApp auto-reply assistant for mw-echo. Answer briefly and clearly.",
+				fmt.Sprintf("From %s: %s", sender, text),
+			)
 		},
 		ArchiveMedia: func(ctx context.Context, project, logicalPath, filename, mimeType string, content []byte) (string, error) {
 			savedObj, upErr := pool.Upload(ctx, project, logicalPath, filepath.Base(filename), mimeType, "", bytes.NewReader(content))
@@ -290,6 +272,76 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	})
 	if err != nil {
 		panic("init world radar: " + err.Error())
+	}
+
+	flowEngine, err = flows.NewEngine(hub, flows.Options{
+		HTTPClient: internalClient,
+		RunRadar: func(ctx context.Context, instanceID string) (string, error) {
+			resolvedID := strings.TrimSpace(instanceID)
+			if resolvedID == "" || resolvedID == "default" {
+				instances, listErr := worldRadar.ListInstances(ctx)
+				if listErr != nil {
+					return "", listErr
+				}
+				if len(instances) == 0 {
+					return "no radar instances installed", nil
+				}
+				resolvedID = instances[0].ID
+			}
+			summary, runErr := worldRadar.RunInstance(ctx, resolvedID)
+			if runErr != nil {
+				return "", runErr
+			}
+			encoded, _ := json.Marshal(summary)
+			return string(encoded), nil
+		},
+		RunAIPrompt: func(ctx context.Context, agentProfile, prompt string) (string, error) {
+			return callInternalGatewayChat(
+				ctx,
+				internalClient,
+				internalGatewayURL,
+				agentProfile,
+				"You are an automation step inside mw-echo Flows. Respond concisely with actionable output.",
+				prompt,
+			)
+		},
+		CreateTask: func(ctx context.Context, project, code, title, priority string) (string, error) {
+			saved, taskErr := hub.UpsertTask(ctx, store.TaskRecord{
+				Project:  project,
+				Code:     code,
+				Title:    title,
+				Priority: priority,
+				Status:   "todo",
+			})
+			if taskErr != nil {
+				return "", taskErr
+			}
+			return saved.Code, nil
+		},
+		SendWhatsApp: func(ctx context.Context, deviceID, phone, message string) (string, error) {
+			sent, sendErr := waMgr.SendText(ctx, deviceID, phone, message, "", nil)
+			if sendErr != nil {
+				return "", sendErr
+			}
+			return sent.MessageID, nil
+		},
+		Backup9Drive: func(ctx context.Context) (string, error) {
+			backups, backupErr := pool.BackupDatabases(ctx)
+			if backupErr != nil {
+				return "", backupErr
+			}
+			encoded, _ := json.Marshal(backups)
+			return string(encoded), nil
+		},
+	})
+	if err != nil {
+		panic("init flows engine: " + err.Error())
+	}
+	hub.RegisterCloser(flowEngine.Close)
+
+	blueprintCat, err := blueprints.NewCatalog(hub)
+	if err != nil {
+		panic("init blueprints catalog: " + err.Error())
 	}
 
 	authGuard := func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -675,8 +727,9 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 		}
 		_, _ = gameEngine.Award(c.Request().Context(), "vault_backup", "Backed up DBs to 9Drive", 35, refID, true)
 		return c.JSON(http.StatusOK, map[string]any{
-			"backups": backups,
-			"count":   len(backups),
+			"backups":  backups,
+			"backedUp": backups,
+			"count":    len(backups),
 		})
 	})
 
@@ -732,7 +785,22 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 
 	// Unified MCP JSON-RPC 2.0 endpoint
 	api.POST("/mcp", func(c echo.Context) error {
-		return handleMCP(c, hub, waMgr, worldRadar)
+		return handleMCP(c, hub, waMgr, worldRadar, blueprintCat, flowEngine)
+	})
+
+	// Trigger matching radar_event flows whenever a World Radar instance run completes via HTTP.
+	api.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			err := next(c)
+			if err == nil &&
+				c.Request().Method == http.MethodPost &&
+				c.Path() == "/api/radar/instances/:id/run" &&
+				c.Response().Status < 400 {
+				payload, _ := json.Marshal(map[string]string{"instanceId": c.Param("id")})
+				_, _ = flowEngine.DispatchTrigger(c.Request().Context(), flows.TriggerRadarEvent, string(payload))
+			}
+			return err
+		}
 	})
 
 	// Unified AI Gateway (Bifrost + 9Router RTK + Magpie + FreeLLMAPI)
@@ -756,7 +824,54 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	// R!OTS World Radar Network (12 WORLD intelligence engine)
 	worldRadar.RegisterRoutes(api)
 
+	// Automation Flows Engine (13 FLOWS)
+	flowEngine.RegisterRoutes(api)
+
+	// Self-Hosted PaaS Blueprint Armory (14 PACKS)
+	blueprintCat.RegisterRoutes(api)
+
 	return app
+}
+
+func callInternalGatewayChat(ctx context.Context, client *http.Client, gatewayURL, agentID, systemPrompt, userPrompt string) (string, error) {
+	reqPayload := map[string]any{
+		"messages": []map[string]string{
+			{"role": "system", "content": systemPrompt},
+			{"role": "user", "content": userPrompt},
+		},
+	}
+	encoded, _ := json.Marshal(reqPayload)
+	req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, gatewayURL, bytes.NewReader(encoded))
+	if reqErr != nil {
+		return "", reqErr
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if strings.TrimSpace(agentID) != "" {
+		req.Header.Set("X-MW-Agent", strings.TrimSpace(agentID))
+	}
+	resp, doErr := client.Do(req)
+	if doErr != nil {
+		return "", doErr
+	}
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("gateway chat HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+	}
+	var parsed struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if unmarshalErr := json.Unmarshal(bodyBytes, &parsed); unmarshalErr != nil {
+		return "", unmarshalErr
+	}
+	if len(parsed.Choices) == 0 {
+		return "", errors.New("empty gateway choice")
+	}
+	return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
 }
 
 type mcpRequest struct {
@@ -766,7 +881,7 @@ type mcpRequest struct {
 	Params  json.RawMessage `json:"params"`
 }
 
-func handleMCP(c echo.Context, hub *store.HubStore, waMgr *whatsapp.Manager, worldRadar *worldradar.Engine) error {
+func handleMCP(c echo.Context, hub *store.HubStore, waMgr *whatsapp.Manager, worldRadar *worldradar.Engine, blueprintCat *blueprints.Catalog, flowEngine *flows.Engine) error {
 	var rpc mcpRequest
 	if err := c.Bind(&rpc); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]any{"jsonrpc": "2.0", "id": nil, "error": map[string]any{"code": -32700, "message": "invalid JSON"}})
@@ -801,6 +916,8 @@ func handleMCP(c echo.Context, hub *store.HubStore, waMgr *whatsapp.Manager, wor
 				{"name": "echo_wa_get_messages", "description": "Read messages for a WhatsApp chat JID.", "inputSchema": map[string]any{"type": "object", "required": []string{"chatJid"}, "properties": map[string]any{"deviceId": map[string]string{"type": "string"}, "chatJid": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
 				{"name": "echo_radar_events", "description": "List clustered R!OTS World Radar events optionally filtered by domain ID (D01-D23).", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"domain": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
 				{"name": "echo_radar_run", "description": "Execute a World Radar monitoring instance collection & assessment cycle.", "inputSchema": map[string]any{"type": "object", "required": []string{"instanceId"}, "properties": map[string]any{"instanceId": map[string]string{"type": "string"}}}},
+				{"name": "echo_search_blueprints", "description": "Search self-hosted PaaS Docker Compose blueprints via FTS5.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"query": map[string]string{"type": "string"}, "source": map[string]string{"type": "string"}, "category": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
+				{"name": "echo_run_flow", "description": "Execute an automation flow by ID with an optional trigger payload.", "inputSchema": map[string]any{"type": "object", "required": []string{"id"}, "properties": map[string]any{"id": map[string]string{"type": "string"}, "triggerPayload": map[string]string{"type": "string"}}}},
 			},
 		})
 	case "tools/call":
@@ -870,6 +987,18 @@ func handleMCP(c echo.Context, hub *store.HubStore, waMgr *whatsapp.Manager, wor
 				instanceID = strArg("id")
 			}
 			out, err = worldRadar.RunInstance(ctx, instanceID)
+		case "echo_search_blueprints":
+			out, err = blueprintCat.Search(ctx, strArg("query"), strArg("source"), strArg("category"), intArg("limit", 25))
+		case "echo_run_flow":
+			flowID := strArg("id")
+			if flowID == "" {
+				flowID = strArg("flowId")
+			}
+			payload := strArg("triggerPayload")
+			if payload == "" {
+				payload = strArg("payload")
+			}
+			out, err = flowEngine.RunFlowByID(ctx, flowID, payload)
 		default:
 			return fail(-32601, "unknown tool: "+call.Name)
 		}
