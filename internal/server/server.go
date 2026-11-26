@@ -925,6 +925,7 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	})
 
 	// Unified AI Gateway (Bifrost + 9Router RTK + Magpie + FreeLLMAPI)
+	app.Pre(aigateway.RocksoulProxyMiddleware(os.Getenv))
 	aiGateway.RegisterRoutes(app, api)
 
 	// Observatory (OTLP ingest + Host protocol auto-discovery + Local Git Repo Radar)
