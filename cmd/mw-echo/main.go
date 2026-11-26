@@ -19,7 +19,6 @@ import (
 
 	"github.com/A-L-L-A-H/mw-echo/internal/codingagent"
 	"github.com/A-L-L-A-H/mw-echo/internal/desktop"
-	"github.com/A-L-L-A-H/mw-echo/internal/diskdoctor"
 	"github.com/A-L-L-A-H/mw-echo/internal/importer"
 	"github.com/A-L-L-A-H/mw-echo/internal/server"
 	"github.com/A-L-L-A-H/mw-echo/internal/store"
@@ -64,9 +63,6 @@ func main() {
 			return
 		case "desktop":
 			runDesktopCommand(os.Args[2:])
-			return
-		case "disk":
-			runDiskCommand(os.Args[2:])
 			return
 		}
 	}
@@ -376,90 +372,4 @@ func runDesktopCommand(args []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = app.Shutdown(ctx)
-}
-
-func runDiskCommand(args []string) {
-	fs := flag.NewFlagSet("disk", flag.ExitOnError)
-	scanPath := fs.String("scan", "", "Optional directory path to scan instead of quick hotspot audit")
-	withAI := fs.Bool("ai", false, "Run AI/engineering deep diagnosis on the scan report")
-	dataDir := fs.String("data-dir", defaultDataDir(), "SQLite and blob storage directory")
-	_ = fs.Parse(args)
-
-	ctx := context.Background()
-
-	drives, err := diskdoctor.ListDrives()
-	if err != nil {
-		log.Fatalf("list drives failed: %v", err)
-	}
-	fmt.Println("=== DRIVES ===")
-	for _, drive := range drives {
-		freeGB := float64(drive.FreeBytes) / (1024 * 1024 * 1024)
-		totalGB := float64(drive.TotalBytes) / (1024 * 1024 * 1024)
-		fmt.Printf("  %-4s  %5.1f%% used  %6.1f GB free / %6.1f GB total  [%s]\n",
-			drive.Drive, drive.UsedPct, freeGB, totalGB, strings.ToUpper(drive.Status))
-	}
-
-	var report diskdoctor.ScanReport
-	if strings.TrimSpace(*scanPath) != "" {
-		report, err = diskdoctor.ScanDirectory(ctx, *scanPath, 3, 50000)
-		if err != nil {
-			log.Fatalf("disk scan failed: %v", err)
-		}
-	} else {
-		report, err = diskdoctor.QuickAudit(ctx)
-		if err != nil {
-			log.Fatalf("disk quick-audit failed: %v", err)
-		}
-	}
-
-	fmt.Printf("\n=== AUDIT (%s | %.2f GiB | %d files | %dms) ===\n",
-		report.RootPath, float64(report.ScannedBytes)/(1024*1024*1024), report.ScannedFiles, report.DurationMs)
-
-	fmt.Println("\nTop App Breakdown:")
-	for idx, appUsage := range report.AppBreakdown {
-		if idx >= 8 {
-			break
-		}
-		fmt.Printf("  %-28s  %8.2f MiB  (%d dirs)  [%s]\n",
-			appUsage.Category, float64(appUsage.Bytes)/(1024*1024), appUsage.DirCount, appUsage.Safety)
-	}
-
-	fmt.Println("\nClean Candidates:")
-	for idx, candidate := range report.CleanCandidates {
-		if idx >= 10 {
-			break
-		}
-		fmt.Printf("  [%-9s] %8.2f MiB  %s  (%s)\n",
-			candidate.Safety, float64(candidate.Bytes)/(1024*1024), candidate.Path, candidate.AppCategory)
-	}
-
-	if *withAI {
-		hub, hubErr := store.Open(*dataDir)
-		if hubErr != nil {
-			log.Fatalf("open hub store: %v", hubErr)
-		}
-		defer func() { _ = hub.Close() }()
-
-		diskMgr, mgrErr := diskdoctor.NewManager(hub, diskdoctor.Options{})
-		if mgrErr != nil {
-			log.Fatalf("init disk doctor: %v", mgrErr)
-		}
-		insight, insightErr := diskMgr.AnalyzeWithAI(ctx, drives, report)
-		if insightErr != nil {
-			log.Fatalf("disk insight failed: %v", insightErr)
-		}
-		fmt.Printf("\n=== DIAGNOSIS (%s) ===\n%s\n", insight.Source, insight.Summary)
-		if len(insight.RootCauses) > 0 {
-			fmt.Println("\nRoot Causes:")
-			for _, cause := range insight.RootCauses {
-				fmt.Printf("  - %s\n", cause)
-			}
-		}
-		if len(insight.Recommendations) > 0 {
-			fmt.Println("\nRecommendations:")
-			for _, rec := range insight.Recommendations {
-				fmt.Printf("  - %s\n", rec)
-			}
-		}
-	}
 }

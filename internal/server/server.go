@@ -26,7 +26,6 @@ import (
 	"github.com/A-L-L-A-H/mw-echo/internal/codingagent"
 	"github.com/A-L-L-A-H/mw-echo/internal/comms"
 	"github.com/A-L-L-A-H/mw-echo/internal/desktop"
-	"github.com/A-L-L-A-H/mw-echo/internal/diskdoctor"
 	"github.com/A-L-L-A-H/mw-echo/internal/fleet"
 	"github.com/A-L-L-A-H/mw-echo/internal/flows"
 	"github.com/A-L-L-A-H/mw-echo/internal/gamification"
@@ -339,15 +338,6 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	meshMgr, err := meshfleet.NewManager(hub, meshfleet.Options{})
 	if err != nil {
 		panic("init mesh fleet manager: " + err.Error())
-	}
-
-	diskMgr, err := diskdoctor.NewManager(hub, diskdoctor.Options{
-		AIAnalyze: func(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
-			return callInternalGatewayChat(ctx, internalClient, internalGatewayURL, "sidekick", systemPrompt, userPrompt)
-		},
-	})
-	if err != nil {
-		panic("init disk doctor manager: " + err.Error())
 	}
 
 	flowEngine, err = flows.NewEngine(hub, flows.Options{
@@ -1040,9 +1030,6 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	// Private Mesh Fleet & Git Worktrees
 	meshMgr.RegisterRoutes(api)
 
-	// Intelligent Disk & Directory Doctor (17 DISK)
-	diskMgr.RegisterRoutes(api)
-
 	// Local-first Memory Vault & Hard Privacy Firewall
 	memMgr.RegisterRoutes(api)
 
@@ -1163,7 +1150,6 @@ func handleMCP(
 				{"name": "echo_env_keys", "description": "List redacted secret key metadata in VaultEnv for a project and environment (never exposes plaintext secret values).", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]string{"type": "string"}, "env": map[string]string{"type": "string"}}}},
 				{"name": "echo_desktop_doctor", "description": "Run MW-ECHO desktop runtime health diagnostics and generate a redacted support report.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 				{"name": "echo_local_ai_discover", "description": "Discover local loopback AI runtimes (Ollama, LM Studio, vLLM) and available models.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
-				{"name": "echo_disk_audit", "description": "Read-only disk telemetry and hotspot quick audit across local volumes (never deletes files).", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 				{"name": "echo_memvault_search", "description": "Full-text search cloud-safe public conversations in local MemVault (strictly enforces cloudSafeOnly=true privacy firewall).", "inputSchema": map[string]any{"type": "object", "required": []string{"query"}, "properties": map[string]any{"query": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
 				{"name": "echo_fleet_probe", "description": "Concurrently probe /health across all registered Sovereign Fleet services.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
 				{"name": "echo_arsy_audit_verify", "description": "Verify the SHA-256 Merkle hash chain integrity of the ARSY constitutional audit log.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
@@ -1268,21 +1254,6 @@ func handleMCP(
 			out, err = desktopMgr.RunDoctor(ctx)
 		case "echo_local_ai_discover":
 			out = desktopMgr.DiscoverLocalAI(ctx, nil)
-		case "echo_disk_audit":
-			drives, drivesErr := diskdoctor.ListDrives()
-			if drivesErr != nil {
-				err = drivesErr
-			} else {
-				quickAudit, auditErr := diskdoctor.QuickAudit(ctx)
-				if auditErr != nil {
-					err = auditErr
-				} else {
-					out = map[string]any{
-						"drives":     drives,
-						"quickAudit": quickAudit,
-					}
-				}
-			}
 		case "echo_memvault_search":
 			out, err = memMgr.Search(ctx, strArg("query"), true, intArg("limit", 25))
 		case "echo_fleet_probe":
