@@ -559,7 +559,8 @@ func TestFlowsBlueprintsAndExpandedMCPRoutes(t *testing.T) {
 
 	composeRec := httptest.NewRecorder()
 	handler.ServeHTTP(composeRec, httptest.NewRequest(http.MethodGet, "/api/blueprints/curated:mw-echo/compose", nil))
-	if composeRec.Code != http.StatusOK || !strings.Contains(composeRec.Body.String(), "ghcr.io/a-l-l-a-h/mw-echo:latest") {
+	if composeRec.Code != http.StatusOK || !strings.Contains(composeRec.Body.String(),
+		"ghcr.io/a-l-l-a-h/mw-echo:latest") {
 		t.Fatalf("GET /api/blueprints/curated:mw-echo/compose failed: %d %s", composeRec.Code, composeRec.Body.String())
 	}
 
@@ -586,7 +587,8 @@ func TestFlowsBlueprintsAndExpandedMCPRoutes(t *testing.T) {
 	mcpFlowReq.Header.Set("Content-Type", "application/json")
 	mcpFlowRec := httptest.NewRecorder()
 	handler.ServeHTTP(mcpFlowRec, mcpFlowReq)
-	if mcpFlowRec.Code != http.StatusOK || !strings.Contains(mcpFlowRec.Body.String(), "FLOW-1") || !strings.Contains(mcpFlowRec.Body.String(), "mcp-run") {
+	if mcpFlowRec.Code != http.StatusOK || !strings.Contains(mcpFlowRec.Body.String(),
+		"FLOW-1") || !strings.Contains(mcpFlowRec.Body.String(), "mcp-run") {
 		t.Fatalf("MCP echo_run_flow failed: %d %s", mcpFlowRec.Code, mcpFlowRec.Body.String())
 	}
 }
@@ -621,7 +623,8 @@ func TestWaveD2RoutesAndMCPTools(t *testing.T) {
 	mcpListReq.Header.Set("Content-Type", "application/json")
 	mcpListRec := httptest.NewRecorder()
 	handler.ServeHTTP(mcpListRec, mcpListReq)
-	for _, toolName := range []string{"echo_comms_send", "echo_env_keys", "echo_desktop_doctor", "echo_local_ai_discover"} {
+	for _, toolName := range []string{"echo_comms_send", "echo_env_keys", "echo_desktop_doctor",
+		"echo_local_ai_discover"} {
 		if !strings.Contains(mcpListRec.Body.String(), toolName) {
 			t.Fatalf("MCP tools/list missing %s: %s", toolName, mcpListRec.Body.String())
 		}
@@ -631,7 +634,8 @@ func TestWaveD2RoutesAndMCPTools(t *testing.T) {
 	mcpEnvReq.Header.Set("Content-Type", "application/json")
 	mcpEnvRec := httptest.NewRecorder()
 	handler.ServeHTTP(mcpEnvRec, mcpEnvReq)
-	if mcpEnvRec.Code != http.StatusOK || !strings.Contains(mcpEnvRec.Body.String(), "API_KEY") || strings.Contains(mcpEnvRec.Body.String(), "super-secret-plaintext-999") {
+	if mcpEnvRec.Code != http.StatusOK || !strings.Contains(mcpEnvRec.Body.String(),
+		"API_KEY") || strings.Contains(mcpEnvRec.Body.String(), "super-secret-plaintext-999") {
 		t.Fatalf("MCP echo_env_keys failed or leaked plaintext: %d %s", mcpEnvRec.Code, mcpEnvRec.Body.String())
 	}
 

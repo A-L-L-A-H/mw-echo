@@ -143,7 +143,8 @@ func inspectGitRepo(repoDir string, importedPaths, importedNames map[string]bool
 	branch := readGitBranch(filepath.Join(repoDir, ".git", "HEAD"))
 	remote := readGitOriginURL(filepath.Join(repoDir, ".git", "config"))
 	hasDocs := dirExists(filepath.Join(repoDir, "docs")) || fileExists(filepath.Join(repoDir, "README.md"))
-	hasTasks := fileExists(filepath.Join(repoDir, "docs", "tasks", "tasks.json")) || fileExists(filepath.Join(repoDir, "tasks.json"))
+	hasTasks := fileExists(filepath.Join(repoDir, "docs", "tasks", "tasks.json")) || fileExists(filepath.Join(repoDir,
+		"tasks.json"))
 
 	modTime := ""
 	if info, err := os.Stat(repoDir); err == nil {
@@ -151,7 +152,8 @@ func inspectGitRepo(repoDir string, importedPaths, importedNames map[string]bool
 	}
 
 	cleanKey := strings.ToLower(filepath.Clean(repoDir))
-	imported := importedPaths[cleanKey] || importedNames[strings.ToLower(name)] || (name == "mw-xv" && importedNames["moonwitness"])
+	imported := importedPaths[cleanKey] || importedNames[strings.ToLower(name)] || (name == "mw-xv" &&
+		importedNames["moonwitness"])
 
 	return DiscoveredRepo{
 		Name:         name,

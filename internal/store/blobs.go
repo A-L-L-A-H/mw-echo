@@ -27,7 +27,8 @@ func (s *HubStore) blobFilePath(digest string) (string, error) {
 	return filepath.Join(s.blobDir, digest[:2], digest), nil
 }
 
-func (s *HubStore) PutBlob(ctx context.Context, project, logicalPath, filename, mimeType string, reader io.Reader) (StorageObject, error) {
+func (s *HubStore) PutBlob(ctx context.Context, project, logicalPath, filename, mimeType string,
+	reader io.Reader) (StorageObject, error) {
 	project = strings.TrimSpace(project)
 	if project == "" {
 		project = "default"
@@ -115,7 +116,8 @@ ON CONFLICT(project, logical_path) DO UPDATE SET
 	return obj, nil
 }
 
-func (s *HubStore) RecordRemoteBlob(ctx context.Context, project, logicalPath, filename, mimeType, digest string, sizeBytes int64) (StorageObject, error) {
+func (s *HubStore) RecordRemoteBlob(ctx context.Context, project, logicalPath, filename, mimeType, digest string,
+	sizeBytes int64) (StorageObject, error) {
 	obj := StorageObject{
 		ID:          makeDeterministicID("blob", project, logicalPath),
 		Project:     project,
@@ -173,7 +175,8 @@ FROM storage_objects %s ORDER BY created_at DESC, logical_path ASC LIMIT ?`, whe
 	objects := make([]StorageObject, 0)
 	for rows.Next() {
 		var obj StorageObject
-		if err := rows.Scan(&obj.ID, &obj.Project, &obj.LogicalPath, &obj.Filename, &obj.MimeType, &obj.SHA256, &obj.SizeBytes, &obj.CreatedAt); err != nil {
+		if err := rows.Scan(&obj.ID, &obj.Project, &obj.LogicalPath, &obj.Filename, &obj.MimeType, &obj.SHA256,
+			&obj.SizeBytes, &obj.CreatedAt); err != nil {
 			return nil, err
 		}
 		objects = append(objects, obj)

@@ -476,7 +476,8 @@ func (c *Catalog) sniffBigBear(ctx context.Context, repo, sha string) ([]Bluepri
 				}
 			}
 			lowerPath := strings.ToLower(entry.Path)
-			if strings.HasPrefix(lowerPath, "apps/") && (strings.HasSuffix(lowerPath, "/docker-compose.yml") || strings.HasSuffix(lowerPath, "/docker-compose.yaml")) {
+			if strings.HasPrefix(lowerPath, "apps/") && (strings.HasSuffix(lowerPath,
+				"/docker-compose.yml") || strings.HasSuffix(lowerPath, "/docker-compose.yaml")) {
 				slug := slugify(path.Base(path.Dir(entry.Path)))
 				if slug != "" {
 					composePaths[slug] = entry.Path
@@ -767,17 +768,23 @@ func cleanTags(existing []string, extra ...string) []string {
 func inferCategory(slug string, tags []string) string {
 	combined := strings.ToLower(slug + " " + strings.Join(tags, " "))
 	switch {
-	case strings.Contains(combined, "postgres") || strings.Contains(combined, "mysql") || strings.Contains(combined, "mongo") || strings.Contains(combined, "mariadb"):
+	case strings.Contains(combined, "postgres") || strings.Contains(combined, "mysql") || strings.Contains(combined,
+		"mongo") || strings.Contains(combined, "mariadb"):
 		return "database"
-	case strings.Contains(combined, "redis") || strings.Contains(combined, "valkey") || strings.Contains(combined, "memcached"):
+	case strings.Contains(combined, "redis") || strings.Contains(combined, "valkey") || strings.Contains(combined,
+		"memcached"):
 		return "cache"
-	case strings.Contains(combined, "s3") || strings.Contains(combined, "minio") || strings.Contains(combined, "garage") || strings.Contains(combined, "storage"):
+	case strings.Contains(combined, "s3") || strings.Contains(combined, "minio") || strings.Contains(combined,
+		"garage") || strings.Contains(combined, "storage"):
 		return "storage"
-	case strings.Contains(combined, "grafana") || strings.Contains(combined, "prometheus") || strings.Contains(combined, "uptime") || strings.Contains(combined, "monitor"):
+	case strings.Contains(combined, "grafana") || strings.Contains(combined, "prometheus") || strings.Contains(combined,
+		"uptime") || strings.Contains(combined, "monitor"):
 		return "monitoring"
-	case strings.Contains(combined, "ollama") || strings.Contains(combined, "qdrant") || strings.Contains(combined, "llm") || strings.Contains(combined, "ai"):
+	case strings.Contains(combined, "ollama") || strings.Contains(combined, "qdrant") || strings.Contains(combined,
+		"llm") || strings.Contains(combined, "ai"):
 		return "ai"
-	case strings.Contains(combined, "n8n") || strings.Contains(combined, "automation") || strings.Contains(combined, "workflow"):
+	case strings.Contains(combined, "n8n") || strings.Contains(combined, "automation") || strings.Contains(combined,
+		"workflow"):
 		return "automation"
 	default:
 		return "apps"

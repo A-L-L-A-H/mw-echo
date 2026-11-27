@@ -109,7 +109,8 @@ func GenerateKwitansi(in KwitansiInput) (KwitansiReceipt, error) {
 		zakatIDR = 0
 	}
 
-	canonical := fmt.Sprintf("%s|%s|%d|%s", invoiceID, strings.ToLower(customerName), in.AmountIDR, paidAt.Format(time.RFC3339))
+	canonical := fmt.Sprintf("%s|%s|%d|%s", invoiceID, strings.ToLower(customerName), in.AmountIDR,
+		paidAt.Format(time.RFC3339))
 	sum := sha256.Sum256([]byte(canonical))
 	fullHash := hex.EncodeToString(sum[:])
 	shortHash := strings.ToUpper(fullHash[:12])
@@ -309,7 +310,8 @@ func (a *DeliveryAdapter) Deliver(ctx context.Context, receipt KwitansiReceipt) 
 	return res, nil
 }
 
-func (a *DeliveryAdapter) sendResendEmail(ctx context.Context, recipient string, receipt KwitansiReceipt) (string, error) {
+func (a *DeliveryAdapter) sendResendEmail(ctx context.Context, recipient string, receipt KwitansiReceipt) (string,
+	error) {
 	if !strings.Contains(recipient, "@") || strings.ContainsAny(recipient, "\r\n") {
 		return "", fmt.Errorf("invalid recipient email %q", recipient)
 	}

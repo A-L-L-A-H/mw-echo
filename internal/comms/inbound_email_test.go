@@ -50,7 +50,8 @@ func TestInboundEmailAuthAndTicket(t *testing.T) {
 	if rec := postInbound(e, payload, nil); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("no auth: got %d", rec.Code)
 	}
-	if rec := postInbound(e, payload, map[string]string{"X-Webhook-Secret": "wrong"}); rec.Code != http.StatusUnauthorized {
+	if rec := postInbound(e, payload,
+		map[string]string{"X-Webhook-Secret": "wrong"}); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("bad secret: got %d", rec.Code)
 	}
 	if rec := postInbound(e, payload, map[string]string{"X-Webhook-Secret": secret}); rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), `"priority":"P1"`) {

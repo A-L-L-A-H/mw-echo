@@ -134,7 +134,8 @@ func snapshotSQLiteDB(ctx context.Context, db *sql.DB, snapshotPath string) erro
 	return nil
 }
 
-func (p *PoolManager) uploadSnapshotFile(ctx context.Context, snapshotPath, dbName, ts, preferredProviderID string) (PooledObject, error) {
+func (p *PoolManager) uploadSnapshotFile(ctx context.Context, snapshotPath, dbName, ts,
+	preferredProviderID string) (PooledObject, error) {
 	// Remove after closing the file handle (LIFO defer order ensures Close runs first on Windows).
 	defer func() { _ = os.Remove(snapshotPath) }()
 

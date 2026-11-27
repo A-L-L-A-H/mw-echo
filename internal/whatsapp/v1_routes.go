@@ -246,7 +246,8 @@ func (m *Manager) handleV1MediaUpload(c echo.Context) error {
 	}
 
 	filename := firstNonEmpty(c.Request().Header.Get("X-Filename"), c.QueryParam("filename"), "upload.bin")
-	meta, err := m.StreamUploadMedia(c.Request().Context(), deviceID, c.QueryParam("logical_path"), filename, contentType, c.Request().Body)
+	meta, err := m.StreamUploadMedia(c.Request().Context(), deviceID, c.QueryParam("logical_path"), filename, contentType,
+		c.Request().Body)
 	if err != nil {
 		return gowaError(c, http.StatusBadRequest, err.Error())
 	}
@@ -308,7 +309,8 @@ func (m *Manager) handleV1Asset(c echo.Context) error {
 	rawName := strings.TrimSpace(c.Param("filename"))
 	cleaned := path.Clean("/" + rawName)
 	base := path.Base(cleaned)
-	if rawName == "" || base == "." || base == "/" || strings.Contains(rawName, "..") || strings.Contains(rawName, "/") || strings.Contains(rawName, "\\") {
+	if rawName == "" || base == "." || base == "/" || strings.Contains(rawName, "..") || strings.Contains(rawName,
+		"/") || strings.Contains(rawName, "\\") {
 		return gowaError(c, http.StatusBadRequest, "invalid asset filename")
 	}
 	content, err := embeddedAssetsFS.ReadFile("assets/" + base)

@@ -57,7 +57,8 @@ func digestJWT(t *testing.T, hashAlg crypto.Hash, signingInput string) []byte {
 	}
 }
 
-func signJWTWithHash(t *testing.T, privateKey *rsa.PrivateKey, hashAlg crypto.Hash, header, payload map[string]any) string {
+func signJWTWithHash(t *testing.T, privateKey *rsa.PrivateKey, hashAlg crypto.Hash, header,
+	payload map[string]any) string {
 	t.Helper()
 	headerBytes, err := json.Marshal(header)
 	if err != nil {
@@ -139,13 +140,15 @@ func TestRIDVerifierRejectsForbiddenAlgorithms(t *testing.T) {
 			wantErr: `unsupported jwt alg "none"`,
 		},
 		{
-			name:    "RS384 signed token",
-			token:   signJWTWithHash(t, signingKey, crypto.SHA384, contractHeader("RS384", contractKID), validContractPayload(nowUnix)),
+			name: "RS384 signed token",
+			token: signJWTWithHash(t, signingKey, crypto.SHA384, contractHeader("RS384", contractKID),
+				validContractPayload(nowUnix)),
 			wantErr: `unsupported jwt alg "RS384"`,
 		},
 		{
-			name:    "RS512 signed token",
-			token:   signJWTWithHash(t, signingKey, crypto.SHA512, contractHeader("RS512", contractKID), validContractPayload(nowUnix)),
+			name: "RS512 signed token",
+			token: signJWTWithHash(t, signingKey, crypto.SHA512, contractHeader("RS512", contractKID),
+				validContractPayload(nowUnix)),
 			wantErr: `unsupported jwt alg "RS512"`,
 		},
 	}
@@ -205,7 +208,8 @@ func TestRIDVerifierRejectsBadSignature(t *testing.T) {
 
 	verifier := newContractVerifier(t, jwksServer.URL, jwksServer.Client())
 	nowUnix := time.Now().UTC().Unix()
-	forgedToken := signJWTWithHash(t, attackerKey, crypto.SHA256, contractHeader("RS256", contractKID), validContractPayload(nowUnix))
+	forgedToken := signJWTWithHash(t, attackerKey, crypto.SHA256, contractHeader("RS256", contractKID),
+		validContractPayload(nowUnix))
 
 	assertRejected(t, verifier, forgedToken, "invalid jwt signature")
 }
@@ -233,7 +237,8 @@ func TestRIDVerifierRefreshesJWKSForUnknownKid(t *testing.T) {
 
 	verifier := newContractVerifier(t, jwksServer.URL, jwksServer.Client())
 	nowUnix := time.Now().UTC().Unix()
-	oldToken := signJWTWithHash(t, oldKey, crypto.SHA256, contractHeader("RS256", "kid-old"), validContractPayload(nowUnix))
+	oldToken := signJWTWithHash(t, oldKey, crypto.SHA256, contractHeader("RS256", "kid-old"),
+		validContractPayload(nowUnix))
 	if _, err := verifier.VerifyAccessToken(context.Background(), oldToken); err != nil {
 		t.Fatalf("expected initial kid-old token to pass: %v", err)
 	}

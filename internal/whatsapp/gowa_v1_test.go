@@ -54,7 +54,8 @@ func TestEnvelopeSerializationAndValidation(t *testing.T) {
 		t.Fatalf("expected normalized type=interactive, got %q", interactiveEnv.Type)
 	}
 	rendered := RenderInteractiveText(interactiveEnv.Interactive)
-	if !strings.Contains(rendered, "*Order #42*") || !strings.Contains(rendered, "[1] Approve") || !strings.Contains(rendered, "_mw-echo_") {
+	if !strings.Contains(rendered, "*Order #42*") || !strings.Contains(rendered,
+		"[1] Approve") || !strings.Contains(rendered, "_mw-echo_") {
 		t.Fatalf("unexpected interactive render: %q", rendered)
 	}
 
@@ -132,7 +133,8 @@ func TestWebhookHMACVectorsAndConfigEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
 		t.Fatalf("decode webhook config response: %v", err)
 	}
-	if env.Code != "SUCCESS" || env.Results["webhook_url"] != "https://hooks.local/wa" || env.Results["has_webhook_secret"] != true {
+	if env.Code != "SUCCESS" || env.Results["webhook_url"] != "https://hooks.local/wa" ||
+		env.Results["has_webhook_secret"] != true {
 		t.Fatalf("unexpected webhook config response: %+v", env)
 	}
 }
@@ -231,7 +233,8 @@ func TestV1NineDriveZeroDiskMediaStreamUploadAndDownload(t *testing.T) {
 	})
 
 	_, app, _ := openTestManager(t, Options{
-		MediaUploadStream: func(ctx context.Context, project, logicalPath, filename, mimeType string, reader io.Reader) (string, error) {
+		MediaUploadStream: func(ctx context.Context, project, logicalPath, filename, mimeType string,
+			reader io.Reader) (string, error) {
 			raw, err := io.ReadAll(reader)
 			if err != nil {
 				return "", err
@@ -364,7 +367,8 @@ func TestV1SystemHealthMetricsInboxAssetsAndAIGatewayAdapter(t *testing.T) {
 	mgr.WaitBackground()
 
 	if capturedAgentHeader != "cx-gemini" || !strings.Contains(capturedPrompt, "Where is order #42?") {
-		t.Fatalf("AI gateway adapter did not forward expected agent/prompt: agent=%q prompt=%q", capturedAgentHeader, capturedPrompt)
+		t.Fatalf("AI gateway adapter did not forward expected agent/prompt: agent=%q prompt=%q", capturedAgentHeader,
+			capturedPrompt)
 	}
 
 	// Verify /api/v1/system/health.

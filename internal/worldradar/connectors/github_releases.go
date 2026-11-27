@@ -51,7 +51,8 @@ type ghRelease struct {
 func (c *GitHubReleasesConnector) Type() ConnectorType { return ConnectorGitHubReleases }
 
 // Discover paginates /repos/{owner}/{repo}/releases and returns releases newer than checkpoint.
-func (c *GitHubReleasesConnector) Discover(ctx context.Context, checkpoint Checkpoint) ([]DiscoveredItem, Checkpoint, error) {
+func (c *GitHubReleasesConnector) Discover(ctx context.Context, checkpoint Checkpoint) ([]DiscoveredItem, Checkpoint,
+	error) {
 	if strings.TrimSpace(c.Owner) == "" || strings.TrimSpace(c.Repo) == "" {
 		return nil, checkpoint, fmt.Errorf("github owner and repo are required")
 	}
@@ -72,7 +73,8 @@ func (c *GitHubReleasesConnector) Discover(ctx context.Context, checkpoint Check
 		if err != nil {
 			return nil, checkpoint, err
 		}
-		if statusCode == http.StatusTooManyRequests || (statusCode == http.StatusForbidden && strings.TrimSpace(respHeaders.Get("X-RateLimit-Remaining")) == "0") {
+		if statusCode == http.StatusTooManyRequests || (statusCode == http.StatusForbidden &&
+			strings.TrimSpace(respHeaders.Get("X-RateLimit-Remaining")) == "0") {
 			return nil, checkpoint, fmt.Errorf("github rate limited (http %d)", statusCode)
 		}
 		if statusCode < 200 || statusCode >= 300 {
@@ -108,7 +110,8 @@ func (c *GitHubReleasesConnector) Discover(ctx context.Context, checkpoint Check
 		fp := HashSHA256Hex([]byte(relIDStr + "|" + pubAt.UTC().Format(time.RFC3339Nano) + "|" + rel.TagName))
 
 		items = append(items, DiscoveredItem{
-			Locator:     firstNonEmpty(rel.HTMLURL, fmt.Sprintf("https://github.com/%s/%s/releases/tag/%s", c.Owner, c.Repo, rel.TagName)),
+			Locator: firstNonEmpty(rel.HTMLURL, fmt.Sprintf("https://github.com/%s/%s/releases/tag/%s", c.Owner, c.Repo,
+				rel.TagName)),
 			Title:       title,
 			PublishedAt: pubAt,
 			Metadata: map[string]string{

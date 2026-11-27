@@ -280,7 +280,8 @@ func TestWorktreeSandbox_RealGitRepo(t *testing.T) {
 		t.Fatalf("expected 1 primary worktree, got %d: %+v", len(initialWorktrees), initialWorktrees)
 	}
 
-	if _, escapeErr := CreateWorktree(ctx, repoDir, "feat/escape", "../outside-escape"); !errors.Is(escapeErr, ErrPathEscape) {
+	if _, escapeErr := CreateWorktree(ctx, repoDir, "feat/escape", "../outside-escape"); !errors.Is(escapeErr,
+		ErrPathEscape) {
 		t.Fatalf("expected ErrPathEscape for .. traversal, got %v", escapeErr)
 	}
 	outsideDir := filepath.Join(filepath.Dir(repoDir), "sibling-outside")

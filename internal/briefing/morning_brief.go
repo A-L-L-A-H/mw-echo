@@ -98,7 +98,8 @@ func GenerateMorningBrief(m MorningMetrics) ExecutiveBrief {
 	}
 
 	var md strings.Builder
-	md.WriteString(fmt.Sprintf("# MORNING EXECUTIVE BRIEF — %s (07:00 WIB) [%s]\n\n", scheduled.Format("2006-01-02"), overall))
+	md.WriteString(fmt.Sprintf("# MORNING EXECUTIVE BRIEF — %s (07:00 WIB) [%s]\n\n", scheduled.Format("2006-01-02"),
+		overall))
 	md.WriteString(fmt.Sprintf("- **MRR & Billing**: %s (%+.1f%% MoM) | %d pelanggan aktif | %d invoice jatuh tempo\n",
 		mrrFormatted, m.MRRGrowthPct, m.ActiveCustomers, m.OverdueInvoices))
 	md.WriteString(fmt.Sprintf("- **NAS Health**: %s\n", nasLine))

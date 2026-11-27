@@ -92,7 +92,8 @@ func (e *Engine) ToolSpecs() []ToolSpec {
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"path":  map[string]any{"type": "string", "description": "Optional workspace-relative directory path (defaults to workspace root)."},
+					"path": map[string]any{"type": "string",
+						"description": "Optional workspace-relative directory path (defaults to workspace root)."},
 					"depth": map[string]any{"type": "integer", "description": "Optional traversal depth (1-5, default 2)."},
 				},
 			},
@@ -105,9 +106,12 @@ func (e *Engine) ToolSpecs() []ToolSpec {
 				"type":     "object",
 				"required": []string{"pattern"},
 				"properties": map[string]any{
-					"pattern":     map[string]any{"type": "string", "description": "Regular expression or literal substring to search for."},
-					"path":        map[string]any{"type": "string", "description": "Optional workspace-relative file or directory path to scope search."},
-					"max_results": map[string]any{"type": "integer", "description": "Maximum matches to return (default 50, max 200)."},
+					"pattern": map[string]any{"type": "string",
+						"description": "Regular expression or literal substring to search for."},
+					"path": map[string]any{"type": "string",
+						"description": "Optional workspace-relative file or directory path to scope search."},
+					"max_results": map[string]any{"type": "integer",
+						"description": "Maximum matches to return (default 50, max 200)."},
 				},
 			},
 		},
@@ -118,7 +122,8 @@ func (e *Engine) ToolSpecs() []ToolSpec {
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"query": map[string]any{"type": "string", "description": "Optional case-insensitive symbol name substring filter."},
+					"query": map[string]any{"type": "string",
+						"description": "Optional case-insensitive symbol name substring filter."},
 					"limit": map[string]any{"type": "integer", "description": "Maximum symbols to return (default 50, max 200)."},
 				},
 			},
@@ -131,8 +136,9 @@ func (e *Engine) ToolSpecs() []ToolSpec {
 				"type":     "object",
 				"required": []string{"command"},
 				"properties": map[string]any{
-					"command":     map[string]any{"type": "string", "description": "Shell command to execute."},
-					"timeout_sec": map[string]any{"type": "integer", "description": "Optional timeout in seconds (default 30, max 120)."},
+					"command": map[string]any{"type": "string", "description": "Shell command to execute."},
+					"timeout_sec": map[string]any{"type": "integer",
+						"description": "Optional timeout in seconds (default 30, max 120)."},
 				},
 			},
 		},
@@ -156,11 +162,13 @@ func (e *Engine) ToolSpecs() []ToolSpec {
 				"type":     "object",
 				"required": []string{"action"},
 				"properties": map[string]any{
-					"action":  map[string]any{"type": "string", "enum": []string{"list", "update"}, "description": "Operation to perform: 'list' or 'update'."},
+					"action": map[string]any{"type": "string", "enum": []string{"list", "update"},
+						"description": "Operation to perform: 'list' or 'update'."},
 					"project": map[string]any{"type": "string", "description": "Optional project slug filter (for list)."},
 					"code":    map[string]any{"type": "string", "description": "Task code (required for update)."},
-					"status":  map[string]any{"type": "string", "description": "Task status filter (for list) or new status (for update)."},
-					"query":   map[string]any{"type": "string", "description": "Optional keyword query (for list)."},
+					"status": map[string]any{"type": "string",
+						"description": "Task status filter (for list) or new status (for update)."},
+					"query": map[string]any{"type": "string", "description": "Optional keyword query (for list)."},
 				},
 			},
 		},
@@ -382,7 +390,8 @@ func (e *Engine) ExecuteTool(ctx context.Context, session Session, toolName, raw
 		if err := json.Unmarshal([]byte(trimmedArgs), &args); err != nil {
 			return "", fmt.Errorf("invalid hub_tasks arguments: %w", err)
 		}
-		return e.executeHubTasks(ctx, session.Mode, args.Action, args.Project, args.Code, args.Status, args.Priority, args.Title, args.Query)
+		return e.executeHubTasks(ctx, session.Mode, args.Action, args.Project, args.Code, args.Status, args.Priority,
+			args.Title, args.Query)
 
 	default:
 		return "", fmt.Errorf("unknown tool %q", cleanName)
@@ -455,7 +464,8 @@ func executeReadFile(workDir, targetPath string, startLine, endLine int) (string
 		fmt.Fprintf(&out, "%4d | %s\n", lineNo, allLines[lineNo-1])
 	}
 	if truncated {
-		fmt.Fprintf(&out, "... (truncated at %d lines; call read_file with start_line=%d to continue)", maxReadLinesPerCall, effectiveEnd+1)
+		fmt.Fprintf(&out, "... (truncated at %d lines; call read_file with start_line=%d to continue)", maxReadLinesPerCall,
+			effectiveEnd+1)
 	}
 	return strings.TrimRight(out.String(), "\n"), nil
 }
@@ -521,7 +531,8 @@ func executeEditFile(workDir, targetPath, target, replacement string) (string, e
 		return "", fmt.Errorf("target snippet not found in %s", relDisplay)
 	}
 	if matchCount > 1 {
-		return "", fmt.Errorf("target snippet matched %d times in %s; provide more surrounding context for a unique match", matchCount, relDisplay)
+		return "", fmt.Errorf("target snippet matched %d times in %s; provide more surrounding context for a unique match",
+			matchCount, relDisplay)
 	}
 
 	matchIdx := strings.Index(originalText, effectiveTarget)
@@ -530,8 +541,10 @@ func executeEditFile(workDir, targetPath, target, replacement string) (string, e
 		return "", fmt.Errorf("write edited %s: %w", relDisplay, err)
 	}
 
-	diffSnippet := buildUnifiedSnippet(relDisplay, originalText, updatedText, matchIdx, effectiveTarget, effectiveReplacement)
-	return fmt.Sprintf("Edited %s (%d bytes -> %d bytes)\n%s", relDisplay, len(originalText), len(updatedText), diffSnippet), nil
+	diffSnippet := buildUnifiedSnippet(relDisplay, originalText, updatedText, matchIdx, effectiveTarget,
+		effectiveReplacement)
+	return fmt.Sprintf("Edited %s (%d bytes -> %d bytes)\n%s", relDisplay, len(originalText), len(updatedText),
+		diffSnippet), nil
 }
 
 func buildUnifiedSnippet(relPath, originalText, updatedText string, matchIdx int, target, replacement string) string {
@@ -863,14 +876,16 @@ func (e *Engine) executeHubSearchDocs(ctx context.Context, query, project string
 	return string(encoded), nil
 }
 
-func (e *Engine) executeHubTasks(ctx context.Context, mode, action, project, code, status, priority, title, query string) (string, error) {
+func (e *Engine) executeHubTasks(ctx context.Context, mode, action, project, code, status, priority, title,
+	query string) (string, error) {
 	cleanAction := strings.ToLower(strings.TrimSpace(action))
 	if cleanAction == "" {
 		cleanAction = "list"
 	}
 	switch cleanAction {
 	case "list":
-		tasks, err := e.hub.ListTasks(ctx, strings.TrimSpace(project), strings.TrimSpace(status), strings.TrimSpace(priority), strings.TrimSpace(query), 50)
+		tasks, err := e.hub.ListTasks(ctx, strings.TrimSpace(project), strings.TrimSpace(status), strings.TrimSpace(priority),
+			strings.TrimSpace(query), 50)
 		if err != nil {
 			return "", fmt.Errorf("hub_tasks list: %w", err)
 		}
@@ -891,7 +906,8 @@ func (e *Engine) executeHubTasks(ctx context.Context, mode, action, project, cod
 		if cleanCode == "" {
 			return "", errors.New("hub_tasks update requires code")
 		}
-		updated, err := e.hub.UpdateTaskStatus(ctx, cleanCode, strings.TrimSpace(status), strings.TrimSpace(priority), strings.TrimSpace(title))
+		updated, err := e.hub.UpdateTaskStatus(ctx, cleanCode, strings.TrimSpace(status), strings.TrimSpace(priority),
+			strings.TrimSpace(title))
 		if err != nil {
 			return "", fmt.Errorf("hub_tasks update: %w", err)
 		}

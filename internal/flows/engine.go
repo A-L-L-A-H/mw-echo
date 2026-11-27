@@ -975,7 +975,8 @@ func isValidStepKind(kind string) bool {
 	}
 }
 
-func interpolateConfig(cfg map[string]string, triggerPayload, prevOutput string, stepOutputs map[string]string) map[string]string {
+func interpolateConfig(cfg map[string]string, triggerPayload, prevOutput string,
+	stepOutputs map[string]string) map[string]string {
 	resolved := make(map[string]string, len(cfg))
 	for cfgKey, cfgVal := range cfg {
 		updated := strings.ReplaceAll(cfgVal, "{{trigger}}", triggerPayload)

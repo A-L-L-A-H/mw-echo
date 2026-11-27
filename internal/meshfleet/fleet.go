@@ -144,7 +144,8 @@ func ValidateMeshEndpoint(rawURL string, allowLoopback bool) (*url.URL, error) {
 	addr = addr.Unmap()
 
 	if !isAllowedMeshAddr(addr, allowLoopback) {
-		return nil, fmt.Errorf("%w: IP %q is outside RFC1918 and CGNAT 100.64.0.0/10 ranges", ErrEndpointDenied, addr.String())
+		return nil, fmt.Errorf("%w: IP %q is outside RFC1918 and CGNAT 100.64.0.0/10 ranges", ErrEndpointDenied,
+			addr.String())
 	}
 
 	return parsedURL, nil

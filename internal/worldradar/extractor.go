@@ -211,7 +211,8 @@ func isBlockedSSRFAddr(addr netip.Addr) bool {
 
 // FetchAndExtractMarkdown fetches a remote URL with SSRF protection (unless allowPrivateForTest is true)
 // and returns its extracted Markdown representation.
-func (e *Engine) FetchAndExtractMarkdown(ctx context.Context, targetURL string, allowPrivateForTest bool) (ExtractMarkdownResult, error) {
+func (e *Engine) FetchAndExtractMarkdown(ctx context.Context, targetURL string,
+	allowPrivateForTest bool) (ExtractMarkdownResult, error) {
 	trimmedURL := strings.TrimSpace(targetURL)
 	if !allowPrivateForTest {
 		if _, err := ValidatePublicHTTPURL(ctx, trimmedURL); err != nil {

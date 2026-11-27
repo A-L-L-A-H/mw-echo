@@ -70,7 +70,8 @@ var knownWebFeedItemFields = map[string]bool{
 func (c *WebFeedJSONConnector) Type() ConnectorType { return ConnectorWebFeedJSON }
 
 // Discover fetches the JSON Feed 1.1 document and emits unseen items with deterministic cursoring.
-func (c *WebFeedJSONConnector) Discover(ctx context.Context, checkpoint Checkpoint) ([]DiscoveredItem, Checkpoint, error) {
+func (c *WebFeedJSONConnector) Discover(ctx context.Context, checkpoint Checkpoint) ([]DiscoveredItem, Checkpoint,
+	error) {
 	if strings.TrimSpace(c.FeedURL) == "" {
 		return nil, checkpoint, fmt.Errorf("web_feed_json feed URL is required")
 	}
@@ -113,7 +114,8 @@ func (c *WebFeedJSONConnector) Discover(ctx context.Context, checkpoint Checkpoi
 		itemID := getStringField(rawMap, "id")
 		itemURL := firstNonEmpty(getStringField(rawMap, "url"), getStringField(rawMap, "external_url"))
 		title := getStringField(rawMap, "title")
-		rawDate := firstNonEmpty(getStringField(rawMap, "date_published"), getStringField(rawMap, "publishedAt"), getStringField(rawMap, "date_modified"))
+		rawDate := firstNonEmpty(getStringField(rawMap, "date_published"), getStringField(rawMap, "publishedAt"),
+			getStringField(rawMap, "date_modified"))
 		pubAt := parseFlexibleTime(rawDate, time.Time{})
 
 		fp := HashSHA256Hex([]byte(itemID + "|" + rawDate + "|" + title))

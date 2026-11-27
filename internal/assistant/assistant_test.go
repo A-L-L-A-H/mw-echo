@@ -64,9 +64,12 @@ func TestAssistantLiveContextInjectionAndToolCalling(t *testing.T) {
 	defer func() { _ = hub.Close() }()
 
 	ctx := context.Background()
-	_, _ = hub.UpsertDoc(ctx, store.DocRecord{Project: "riot", RelPath: "arch.md", Title: "Architecture", Content: "# Arch\nLive spec"})
-	_, _ = hub.UpsertTask(ctx, store.TaskRecord{Code: "P0-1", Project: "riot", Milestone: "Act 1", Title: "Fix prod race", Priority: "p0", Status: "todo"})
-	_, _ = hub.UpsertTask(ctx, store.TaskRecord{Code: "P0-2", Project: "riot", Milestone: "Act 1", Title: "Done P0", Priority: "p0", Status: "done"})
+	_, _ = hub.UpsertDoc(ctx, store.DocRecord{Project: "riot", RelPath: "arch.md", Title: "Architecture",
+		Content: "# Arch\nLive spec"})
+	_, _ = hub.UpsertTask(ctx, store.TaskRecord{Code: "P0-1", Project: "riot", Milestone: "Act 1", Title: "Fix prod race",
+		Priority: "p0", Status: "todo"})
+	_, _ = hub.UpsertTask(ctx, store.TaskRecord{Code: "P0-2", Project: "riot", Milestone: "Act 1", Title: "Done P0",
+		Priority: "p0", Status: "done"})
 
 	// Initialize gamification schema and award XP to populate Rank/XP/Combo in SQLite.
 	eng, err := gamification.NewEngine(hub, gamification.TelemetryHook{})
@@ -146,7 +149,8 @@ func TestAssistantLiveContextInjectionAndToolCalling(t *testing.T) {
 	if live.P0TasksPending != 1 || live.DocsCount != 1 || live.RouterTokensSaved != 4200 || live.ComboMult != 2.0 {
 		t.Fatalf("unexpected live context: %+v", live)
 	}
-	if !strings.HasPrefix(live.Header, "[RANK: ") || !strings.Contains(live.Header, "COMBO: x2") || !strings.Contains(live.Header, "BOSS: 50% HP]") {
+	if !strings.HasPrefix(live.Header, "[RANK: ") || !strings.Contains(live.Header,
+		"COMBO: x2") || !strings.Contains(live.Header, "BOSS: 50% HP]") {
 		t.Fatalf("unexpected live context header: %q", live.Header)
 	}
 
@@ -209,7 +213,8 @@ func TestAssistantRoutesAndContract(t *testing.T) {
 	if err := json.Unmarshal(contractRec.Body.Bytes(), &contract); err != nil {
 		t.Fatalf("decode contract: %v", err)
 	}
-	if contract.Shortcut != "Ctrl+K" || contract.DrawerStyle != "comic-speech-bubble" || !contract.DailyMissionBriefWidget {
+	if contract.Shortcut != "Ctrl+K" || contract.DrawerStyle != "comic-speech-bubble" ||
+		!contract.DailyMissionBriefWidget {
 		t.Fatalf("unexpected UI contract: %+v", contract)
 	}
 

@@ -78,7 +78,8 @@ func TestImportChatGPTJSONDedupeAndClassification(t *testing.T) {
 						"id": "m2",
 						"author": {"role": "assistant"},
 						"create_time": 1700000002,
-						"content": {"content_type": "text", "parts": ["WAL mode enables concurrent readers alongside FTS5 virtual tables."]}
+						"content": {"content_type": "text",
+							"parts": ["WAL mode enables concurrent readers alongside FTS5 virtual tables."]}
 					}
 				}
 			}
@@ -226,7 +227,8 @@ func TestImportZIPAndPrivacyFirewall(t *testing.T) {
 	if len(cloudHits) != 1 {
 		t.Fatalf("expected exactly 1 cloud-safe hit, got %d", len(cloudHits))
 	}
-	if cloudHits[0].ConversationID != publicID || cloudHits[0].Sensitivity != SensitivityPublic || !cloudHits[0].AllowCloudLLM {
+	if cloudHits[0].ConversationID != publicID || cloudHits[0].Sensitivity != SensitivityPublic ||
+		!cloudHits[0].AllowCloudLLM {
 		t.Fatalf("unexpected cloud-safe hit: %+v", cloudHits[0])
 	}
 
@@ -237,7 +239,8 @@ func TestImportZIPAndPrivacyFirewall(t *testing.T) {
 	if stats.TotalConversations != 3 || stats.TotalMessages != 3 || stats.CloudSafeCount != 1 {
 		t.Fatalf("unexpected stats: %+v", stats)
 	}
-	if stats.BySensitivity[SensitivityChildSensitive] != 1 || stats.BySensitivity[SensitivityPrivate] != 1 || stats.BySensitivity[SensitivityPublic] != 1 {
+	if stats.BySensitivity[SensitivityChildSensitive] != 1 || stats.BySensitivity[SensitivityPrivate] != 1 ||
+		stats.BySensitivity[SensitivityPublic] != 1 {
 		t.Fatalf("unexpected sensitivity breakdown: %+v", stats.BySensitivity)
 	}
 }
@@ -273,7 +276,8 @@ func TestMemvaultRoutes(t *testing.T) {
 	forbiddenRec := httptest.NewRecorder()
 	echoServer.ServeHTTP(forbiddenRec, forbiddenReq)
 	if forbiddenRec.Code != http.StatusForbidden {
-		t.Fatalf("expected 403 for child_sensitive cloud opt-in, got %d body=%s", forbiddenRec.Code, forbiddenRec.Body.String())
+		t.Fatalf("expected 403 for child_sensitive cloud opt-in, got %d body=%s", forbiddenRec.Code,
+			forbiddenRec.Body.String())
 	}
 
 	// Promote to public + allowCloudLLM=true.

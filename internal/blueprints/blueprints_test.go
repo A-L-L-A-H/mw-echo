@@ -135,7 +135,8 @@ func TestGetComposeAndHTTPRoutes(t *testing.T) {
 	if err := json.Unmarshal(detailRec.Body.Bytes(), &detailBlueprint); err != nil {
 		t.Fatalf("decode detail: %v", err)
 	}
-	if detailBlueprint.Slug != "mw-echo" || !strings.Contains(detailBlueprint.ComposeYAML, "ghcr.io/a-l-l-a-h/mw-echo:latest") {
+	if detailBlueprint.Slug != "mw-echo" || !strings.Contains(detailBlueprint.ComposeYAML,
+		"ghcr.io/a-l-l-a-h/mw-echo:latest") {
 		t.Fatalf("unexpected detail blueprint: %+v", detailBlueprint)
 	}
 
@@ -200,7 +201,8 @@ func TestSnifferOfflineMockSHATrackingAndPartialErrors(t *testing.T) {
 				{"id":"ghost","name":"Ghost CMS","version":"5","description":"Modern publishing platform","tags":["cms","blog"]}
 			]`))
 
-		case strings.HasPrefix(reqPath, "/raw/Dokploy/templates/") && strings.HasSuffix(reqPath, "/blueprints/ghost/docker-compose.yml"):
+		case strings.HasPrefix(reqPath, "/raw/Dokploy/templates/") && strings.HasSuffix(reqPath,
+			"/blueprints/ghost/docker-compose.yml"):
 			_, _ = writer.Write([]byte("services:\n  ghost:\n    image: ghost:5-alpine\n"))
 
 		case reqPath == "/api/repos/coollabsio/coolify/commits":
@@ -210,7 +212,8 @@ func TestSnifferOfflineMockSHATrackingAndPartialErrors(t *testing.T) {
 			}
 			_, _ = writer.Write([]byte(`[{"sha":"` + sha + `"}]`))
 
-		case strings.HasPrefix(reqPath, "/raw/coollabsio/coolify/") && strings.HasSuffix(reqPath, "/templates/service-templates-latest.json"):
+		case strings.HasPrefix(reqPath, "/raw/coollabsio/coolify/") && strings.HasSuffix(reqPath,
+			"/templates/service-templates-latest.json"):
 			if strings.Contains(reqPath, "coolify-sha-2") {
 				_, _ = writer.Write([]byte(`{
 					"plausible": {"name":"Plausible Analytics","slogan":"Privacy-friendly web analytics","compose":"` + coolifyCompose + `","tags":["analytics"],"category":"analytics"},
@@ -234,12 +237,14 @@ func TestSnifferOfflineMockSHATrackingAndPartialErrors(t *testing.T) {
 				]
 			}`))
 
-		case strings.HasPrefix(reqPath, "/raw/bigbeartechworld/big-bear-casaos/") && strings.HasSuffix(reqPath, "/apps-list.json"):
+		case strings.HasPrefix(reqPath, "/raw/bigbeartechworld/big-bear-casaos/") && strings.HasSuffix(reqPath,
+			"/apps-list.json"):
 			_, _ = writer.Write([]byte(`[
 				{"slug":"immich","name":"Immich","tagline":"Self-hosted photo and video backup","category":"media","tags":["photos","backup"]}
 			]`))
 
-		case strings.HasPrefix(reqPath, "/raw/bigbeartechworld/big-bear-casaos/") && strings.HasSuffix(reqPath, "/Apps/immich/docker-compose.yml"):
+		case strings.HasPrefix(reqPath, "/raw/bigbeartechworld/big-bear-casaos/") && strings.HasSuffix(reqPath,
+			"/Apps/immich/docker-compose.yml"):
 			_, _ = writer.Write([]byte("services:\n  immich-server:\n    image: ghcr.io/immich-app/immich-server:release\n"))
 
 		default:
@@ -313,7 +318,8 @@ func TestSnifferOfflineMockSHATrackingAndPartialErrors(t *testing.T) {
 		t.Fatalf("decode sniff payload: %v", err)
 	}
 	if sniffPayload.TotalBlueprints != 16 {
-		t.Fatalf("expected 16 total blueprints (12 curated + ghost + plausible + pocketbase + immich), got %d", sniffPayload.TotalBlueprints)
+		t.Fatalf("expected 16 total blueprints (12 curated + ghost + plausible + pocketbase + immich), got %d",
+			sniffPayload.TotalBlueprints)
 	}
 
 	statusBySource := make(map[string]blueprints.SniffResult)

@@ -32,7 +32,8 @@ CREATE TABLE comms_channels (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-INSERT INTO comms_channels VALUES ('legacy-tg', 'telegram', 'Legacy', 'enc', 'hint', '-1001', 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+INSERT INTO comms_channels VALUES ('legacy-tg', 'telegram', 'Legacy', 'enc', 'hint', '-1001', 1, '2026-01-01T00:00:00Z',
+	'2026-01-01T00:00:00Z');
 `)
 	if err != nil {
 		t.Fatalf("seed legacy table: %v", err)
@@ -128,8 +129,11 @@ func TestNtfyResendDeliveryAndAlertBridge(t *testing.T) {
 	if err != nil || !res.Dispatched || res.ChannelCount != 2 {
 		t.Fatalf("expected 2 alert deliveries, got %+v err=%v", res, err)
 	}
-	if !strings.Contains(gotNtfyTitle, "Offsite Backup OK") || gotNtfyPriority != "urgent" || gotNtfyAuth != "" || !strings.Contains(gotNtfyBody, "PG dump encrypted") {
-		t.Fatalf("unexpected ntfy headers/body: title=%q prio=%q auth=%q body=%q", gotNtfyTitle, gotNtfyPriority, gotNtfyAuth, gotNtfyBody)
+	if !strings.Contains(gotNtfyTitle,
+		"Offsite Backup OK") || gotNtfyPriority != "urgent" || gotNtfyAuth != "" || !strings.Contains(gotNtfyBody,
+		"PG dump encrypted") {
+		t.Fatalf("unexpected ntfy headers/body: title=%q prio=%q auth=%q body=%q", gotNtfyTitle, gotNtfyPriority, gotNtfyAuth,
+			gotNtfyBody)
 	}
 	if gotResendAuth != "Bearer re_test_123" || len(gotResendPayload.To) != 1 || gotResendPayload.To[0] != "ops@example.com" || gotResendPayload.From != "billing@mw.local" {
 		t.Fatalf("unexpected resend request: auth=%q payload=%+v", gotResendAuth, gotResendPayload)

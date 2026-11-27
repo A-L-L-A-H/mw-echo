@@ -17,10 +17,12 @@ import (
 )
 
 // MediaStreamUploadFunc streams media directly to 9Drive object storage without buffering to local disk.
-type MediaStreamUploadFunc func(ctx context.Context, project, logicalPath, filename, mimeType string, reader io.Reader) (string, error)
+type MediaStreamUploadFunc func(ctx context.Context, project, logicalPath, filename, mimeType string,
+	reader io.Reader) (string, error)
 
 // MediaStreamDownloadFunc opens a direct stream from 9Drive object storage by storage object ID.
-type MediaStreamDownloadFunc func(ctx context.Context, objectID string) (filename string, mimeType string, body io.ReadCloser, err error)
+type MediaStreamDownloadFunc func(ctx context.Context, objectID string) (filename string, mimeType string,
+	body io.ReadCloser, err error)
 
 // MediaMetadata indexes a 9Drive-offloaded media object in SQLite without storing binary payloads in the DB.
 type MediaMetadata struct {
@@ -35,7 +37,8 @@ type MediaMetadata struct {
 }
 
 // StreamUploadMedia pipes reader directly into the configured 9Drive stream (or HubStore fallback) and indexes metadata in SQLite.
-func (m *Manager) StreamUploadMedia(ctx context.Context, deviceID, logicalPath, filename, mimeType string, reader io.Reader) (MediaMetadata, error) {
+func (m *Manager) StreamUploadMedia(ctx context.Context, deviceID, logicalPath, filename, mimeType string,
+	reader io.Reader) (MediaMetadata, error) {
 	if reader == nil {
 		return MediaMetadata{}, errors.New("media reader is required")
 	}
@@ -103,7 +106,8 @@ func (m *Manager) StreamUploadMedia(ctx context.Context, deviceID, logicalPath, 
 }
 
 // StreamDownloadMedia opens a streaming reader for a media ID from 9Drive, HubStore, or whatsmeow fallback.
-func (m *Manager) StreamDownloadMedia(ctx context.Context, deviceID, mediaID string) (MediaMetadata, io.ReadCloser, error) {
+func (m *Manager) StreamDownloadMedia(ctx context.Context, deviceID, mediaID string) (MediaMetadata, io.ReadCloser,
+	error) {
 	trimmedID := strings.TrimSpace(mediaID)
 	if trimmedID == "" {
 		return MediaMetadata{}, nil, errors.New("media id is required")
@@ -155,7 +159,8 @@ func (m *Manager) StreamDownloadMedia(ctx context.Context, deviceID, mediaID str
 	}, io.NopCloser(bytes.NewReader(content)), nil
 }
 
-func (m *Manager) indexMessageMediaMetadata(ctx context.Context, deviceID, msgID, filename, mimeType, objectID string, content []byte) {
+func (m *Manager) indexMessageMediaMetadata(ctx context.Context, deviceID, msgID, filename, mimeType, objectID string,
+	content []byte) {
 	if len(content) == 0 && objectID == "" {
 		return
 	}

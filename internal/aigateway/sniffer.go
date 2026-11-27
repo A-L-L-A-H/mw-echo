@@ -28,81 +28,120 @@ var (
 
 func knownProviderDirectory() map[string]upstreamProviderMeta {
 	return map[string]upstreamProviderMeta{
-		"groq":          {Slug: "groq", Name: "Groq", BaseURL: "https://api.groq.com/openai/v1"},
-		"cerebras":      {Slug: "cerebras", Name: "Cerebras", BaseURL: "https://api.cerebras.ai/v1"},
-		"openrouter":    {Slug: "openrouter", Name: "OpenRouter", BaseURL: "https://openrouter.ai/api/v1"},
-		"google":        {Slug: "gemini", Name: "Google Gemini", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai"},
-		"gemini":        {Slug: "gemini", Name: "Google Gemini", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai"},
+		"groq":       {Slug: "groq", Name: "Groq", BaseURL: "https://api.groq.com/openai/v1"},
+		"cerebras":   {Slug: "cerebras", Name: "Cerebras", BaseURL: "https://api.cerebras.ai/v1"},
+		"openrouter": {Slug: "openrouter", Name: "OpenRouter", BaseURL: "https://openrouter.ai/api/v1"},
+		"google": {Slug: "gemini", Name: "Google Gemini",
+			BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai"},
+		"gemini": {Slug: "gemini", Name: "Google Gemini",
+			BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai"},
 		"mistral":       {Slug: "mistral", Name: "Mistral", BaseURL: "https://api.mistral.ai/v1"},
 		"nvidia":        {Slug: "nvidia", Name: "NVIDIA NIM", BaseURL: "https://integrate.api.nvidia.com/v1"},
 		"sambanova":     {Slug: "sambanova", Name: "SambaNova", BaseURL: "https://api.sambanova.ai/v1"},
 		"github-models": {Slug: "github-models", Name: "GitHub Models", BaseURL: "https://models.inference.ai.azure.com"},
 		"deepseek":      {Slug: "deepseek", Name: "DeepSeek", BaseURL: "https://api.deepseek.com/v1"},
 		"huggingface":   {Slug: "huggingface", Name: "HuggingFace Router", BaseURL: "https://router.huggingface.co/v1"},
-		"cloudflare":    {Slug: "cloudflare", Name: "Cloudflare Workers AI", BaseURL: "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"},
-		"cohere":        {Slug: "cohere", Name: "Cohere", BaseURL: "https://api.cohere.ai/compatibility/v1"},
-		"zhipu":         {Slug: "zhipu", Name: "Zhipu AI", BaseURL: "https://open.bigmodel.cn/api/paas/v4"},
-		"ollama":        {Slug: "ollama", Name: "Ollama Cloud", BaseURL: "https://ollama.com/v1"},
-		"kilo":          {Slug: "kilo", Name: "Kilo Gateway", BaseURL: "https://api.kilo.ai/api/gateway/v1"},
-		"pollinations":  {Slug: "pollinations", Name: "Pollinations", BaseURL: "https://gen.pollinations.ai/v1"},
-		"reka":          {Slug: "reka", Name: "Reka", BaseURL: "https://api.reka.ai/v1"},
-		"anyapi":        {Slug: "anyapi", Name: "AnyAPI", BaseURL: "https://api.anyapi.ai/v1"},
-		"powertokens":   {Slug: "powertokens", Name: "PowerTokens", BaseURL: "https://api.powertokens.ai/v1"},
-		"cheapllm":      {Slug: "cheapllm", Name: "cheapllm.shop", BaseURL: "https://cheapllm.shop/v1"},
-		"tokenreply":    {Slug: "tokenreply", Name: "TokenReply", BaseURL: "https://api.tokenreply.com/v1"},
-		"radeon":        {Slug: "radeon", Name: "AMD Radeon Cloud", BaseURL: "https://developer.amd.com.cn/radeon/api/v1"},
-		"longcat":       {Slug: "longcat", Name: "LongCat", BaseURL: "https://api.longcat.chat/openai/v1"},
+		"cloudflare": {Slug: "cloudflare", Name: "Cloudflare Workers AI",
+			BaseURL: "https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1"},
+		"cohere":       {Slug: "cohere", Name: "Cohere", BaseURL: "https://api.cohere.ai/compatibility/v1"},
+		"zhipu":        {Slug: "zhipu", Name: "Zhipu AI", BaseURL: "https://open.bigmodel.cn/api/paas/v4"},
+		"ollama":       {Slug: "ollama", Name: "Ollama Cloud", BaseURL: "https://ollama.com/v1"},
+		"kilo":         {Slug: "kilo", Name: "Kilo Gateway", BaseURL: "https://api.kilo.ai/api/gateway/v1"},
+		"pollinations": {Slug: "pollinations", Name: "Pollinations", BaseURL: "https://gen.pollinations.ai/v1"},
+		"reka":         {Slug: "reka", Name: "Reka", BaseURL: "https://api.reka.ai/v1"},
+		"anyapi":       {Slug: "anyapi", Name: "AnyAPI", BaseURL: "https://api.anyapi.ai/v1"},
+		"powertokens":  {Slug: "powertokens", Name: "PowerTokens", BaseURL: "https://api.powertokens.ai/v1"},
+		"cheapllm":     {Slug: "cheapllm", Name: "cheapllm.shop", BaseURL: "https://cheapllm.shop/v1"},
+		"tokenreply":   {Slug: "tokenreply", Name: "TokenReply", BaseURL: "https://api.tokenreply.com/v1"},
+		"radeon":       {Slug: "radeon", Name: "AMD Radeon Cloud", BaseURL: "https://developer.amd.com.cn/radeon/api/v1"},
+		"longcat":      {Slug: "longcat", Name: "LongCat", BaseURL: "https://api.longcat.chat/openai/v1"},
 	}
 }
 
 func curatedFreeCatalog() []CatalogEntry {
 	return []CatalogEntry{
 		// Groq
-		{ProviderSlug: "groq", ProviderName: "Groq", BaseURL: "https://api.groq.com/openai/v1", ModelID: "llama-3.3-70b-versatile", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "groq", ProviderName: "Groq", BaseURL: "https://api.groq.com/openai/v1", ModelID: "llama-3.1-8b-instant", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "groq", ProviderName: "Groq", BaseURL: "https://api.groq.com/openai/v1", ModelID: "meta-llama/llama-4-scout-17b-16e-instruct", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "groq", ProviderName: "Groq", BaseURL: "https://api.groq.com/openai/v1", ModelID: "openai/gpt-oss-120b", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "groq", ProviderName: "Groq", BaseURL: "https://api.groq.com/openai/v1", ModelID: "qwen/qwen3-32b", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "groq", ProviderName: "Groq", BaseURL: "https://api.groq.com/openai/v1",
+			ModelID: "llama-3.3-70b-versatile", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "groq", ProviderName: "Groq", BaseURL: "https://api.groq.com/openai/v1",
+			ModelID: "llama-3.1-8b-instant", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "groq", ProviderName: "Groq", BaseURL: "https://api.groq.com/openai/v1",
+			ModelID: "meta-llama/llama-4-scout-17b-16e-instruct", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "groq", ProviderName: "Groq", BaseURL: "https://api.groq.com/openai/v1",
+			ModelID: "openai/gpt-oss-120b", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "groq", ProviderName: "Groq", BaseURL: "https://api.groq.com/openai/v1", ModelID: "qwen/qwen3-32b",
+			ContextWindow: 131072, FreeTier: true, Source: "seed"},
 		// Cerebras
-		{ProviderSlug: "cerebras", ProviderName: "Cerebras", BaseURL: "https://api.cerebras.ai/v1", ModelID: "llama3.1-8b", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "cerebras", ProviderName: "Cerebras", BaseURL: "https://api.cerebras.ai/v1", ModelID: "gpt-oss-120b", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "cerebras", ProviderName: "Cerebras", BaseURL: "https://api.cerebras.ai/v1", ModelID: "qwen-3-235b-a22b-instruct-2507", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "cerebras", ProviderName: "Cerebras", BaseURL: "https://api.cerebras.ai/v1", ModelID: "zai-glm-4.7", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "cerebras", ProviderName: "Cerebras", BaseURL: "https://api.cerebras.ai/v1", ModelID: "llama3.1-8b",
+			ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "cerebras", ProviderName: "Cerebras", BaseURL: "https://api.cerebras.ai/v1", ModelID: "gpt-oss-120b",
+			ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "cerebras", ProviderName: "Cerebras", BaseURL: "https://api.cerebras.ai/v1",
+			ModelID: "qwen-3-235b-a22b-instruct-2507", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "cerebras", ProviderName: "Cerebras", BaseURL: "https://api.cerebras.ai/v1", ModelID: "zai-glm-4.7",
+			ContextWindow: 131072, FreeTier: true, Source: "seed"},
 		// OpenRouter :free
-		{ProviderSlug: "openrouter", ProviderName: "OpenRouter", BaseURL: "https://openrouter.ai/api/v1", ModelID: "meta-llama/llama-3.3-70b-instruct:free", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "openrouter", ProviderName: "OpenRouter", BaseURL: "https://openrouter.ai/api/v1", ModelID: "qwen/qwen3-coder:free", ContextWindow: 262144, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "openrouter", ProviderName: "OpenRouter", BaseURL: "https://openrouter.ai/api/v1", ModelID: "google/gemma-4-31b-it:free", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "openrouter", ProviderName: "OpenRouter", BaseURL: "https://openrouter.ai/api/v1", ModelID: "openai/gpt-oss-120b:free", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "openrouter", ProviderName: "OpenRouter", BaseURL: "https://openrouter.ai/api/v1", ModelID: "moonshotai/kimi-k2.6:free", ContextWindow: 262144, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "openrouter", ProviderName: "OpenRouter", BaseURL: "https://openrouter.ai/api/v1", ModelID: "nvidia/nemotron-3-super-120b-a12b:free", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "openrouter", ProviderName: "OpenRouter", BaseURL: "https://openrouter.ai/api/v1",
+			ModelID: "meta-llama/llama-3.3-70b-instruct:free", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "openrouter", ProviderName: "OpenRouter", BaseURL: "https://openrouter.ai/api/v1",
+			ModelID: "qwen/qwen3-coder:free", ContextWindow: 262144, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "openrouter", ProviderName: "OpenRouter", BaseURL: "https://openrouter.ai/api/v1",
+			ModelID: "google/gemma-4-31b-it:free", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "openrouter", ProviderName: "OpenRouter", BaseURL: "https://openrouter.ai/api/v1",
+			ModelID: "openai/gpt-oss-120b:free", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "openrouter", ProviderName: "OpenRouter", BaseURL: "https://openrouter.ai/api/v1",
+			ModelID: "moonshotai/kimi-k2.6:free", ContextWindow: 262144, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "openrouter", ProviderName: "OpenRouter", BaseURL: "https://openrouter.ai/api/v1",
+			ModelID: "nvidia/nemotron-3-super-120b-a12b:free", ContextWindow: 131072, FreeTier: true, Source: "seed"},
 		// Google Gemini OpenAI-compat
-		{ProviderSlug: "gemini", ProviderName: "Google Gemini", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", ModelID: "gemini-2.5-flash", ContextWindow: 1048576, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "gemini", ProviderName: "Google Gemini", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", ModelID: "gemini-2.5-flash-lite", ContextWindow: 1048576, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "gemini", ProviderName: "Google Gemini", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", ModelID: "gemini-2.5-pro", ContextWindow: 1048576, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "gemini", ProviderName: "Google Gemini", BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", ModelID: "gemma-4-31b-it", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "gemini", ProviderName: "Google Gemini",
+			BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", ModelID: "gemini-2.5-flash", ContextWindow: 1048576, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "gemini", ProviderName: "Google Gemini",
+			BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", ModelID: "gemini-2.5-flash-lite", ContextWindow: 1048576, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "gemini", ProviderName: "Google Gemini",
+			BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", ModelID: "gemini-2.5-pro", ContextWindow: 1048576, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "gemini", ProviderName: "Google Gemini",
+			BaseURL: "https://generativelanguage.googleapis.com/v1beta/openai", ModelID: "gemma-4-31b-it", ContextWindow: 131072, FreeTier: true, Source: "seed"},
 		// Mistral
-		{ProviderSlug: "mistral", ProviderName: "Mistral", BaseURL: "https://api.mistral.ai/v1", ModelID: "mistral-small-latest", ContextWindow: 128000, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "mistral", ProviderName: "Mistral", BaseURL: "https://api.mistral.ai/v1", ModelID: "codestral-latest", ContextWindow: 256000, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "mistral", ProviderName: "Mistral", BaseURL: "https://api.mistral.ai/v1", ModelID: "open-mistral-nemo", ContextWindow: 128000, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "mistral", ProviderName: "Mistral", BaseURL: "https://api.mistral.ai/v1",
+			ModelID: "mistral-small-latest", ContextWindow: 128000, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "mistral", ProviderName: "Mistral", BaseURL: "https://api.mistral.ai/v1", ModelID: "codestral-latest",
+			ContextWindow: 256000, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "mistral", ProviderName: "Mistral", BaseURL: "https://api.mistral.ai/v1", ModelID: "open-mistral-nemo",
+			ContextWindow: 128000, FreeTier: true, Source: "seed"},
 		// NVIDIA NIM
-		{ProviderSlug: "nvidia", ProviderName: "NVIDIA NIM", BaseURL: "https://integrate.api.nvidia.com/v1", ModelID: "meta/llama-3.3-70b-instruct", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "nvidia", ProviderName: "NVIDIA NIM", BaseURL: "https://integrate.api.nvidia.com/v1", ModelID: "deepseek-ai/deepseek-r1", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "nvidia", ProviderName: "NVIDIA NIM", BaseURL: "https://integrate.api.nvidia.com/v1", ModelID: "qwen/qwen2.5-coder-32b-instruct", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "nvidia", ProviderName: "NVIDIA NIM", BaseURL: "https://integrate.api.nvidia.com/v1",
+			ModelID: "meta/llama-3.3-70b-instruct", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "nvidia", ProviderName: "NVIDIA NIM", BaseURL: "https://integrate.api.nvidia.com/v1",
+			ModelID: "deepseek-ai/deepseek-r1", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "nvidia", ProviderName: "NVIDIA NIM", BaseURL: "https://integrate.api.nvidia.com/v1",
+			ModelID: "qwen/qwen2.5-coder-32b-instruct", ContextWindow: 131072, FreeTier: true, Source: "seed"},
 		// SambaNova
-		{ProviderSlug: "sambanova", ProviderName: "SambaNova", BaseURL: "https://api.sambanova.ai/v1", ModelID: "Meta-Llama-3.3-70B-Instruct", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "sambanova", ProviderName: "SambaNova", BaseURL: "https://api.sambanova.ai/v1", ModelID: "DeepSeek-R1-Distill-Llama-70B", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "sambanova", ProviderName: "SambaNova", BaseURL: "https://api.sambanova.ai/v1", ModelID: "Qwen2.5-Coder-32B-Instruct", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "sambanova", ProviderName: "SambaNova", BaseURL: "https://api.sambanova.ai/v1",
+			ModelID: "Meta-Llama-3.3-70B-Instruct", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "sambanova", ProviderName: "SambaNova", BaseURL: "https://api.sambanova.ai/v1",
+			ModelID: "DeepSeek-R1-Distill-Llama-70B", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "sambanova", ProviderName: "SambaNova", BaseURL: "https://api.sambanova.ai/v1",
+			ModelID: "Qwen2.5-Coder-32B-Instruct", ContextWindow: 131072, FreeTier: true, Source: "seed"},
 		// GitHub Models
-		{ProviderSlug: "github-models", ProviderName: "GitHub Models", BaseURL: "https://models.inference.ai.azure.com", ModelID: "gpt-4o-mini", ContextWindow: 128000, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "github-models", ProviderName: "GitHub Models", BaseURL: "https://models.inference.ai.azure.com", ModelID: "Llama-3.3-70B-Instruct", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "github-models", ProviderName: "GitHub Models", BaseURL: "https://models.inference.ai.azure.com", ModelID: "DeepSeek-R1", ContextWindow: 128000, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "github-models", ProviderName: "GitHub Models", BaseURL: "https://models.inference.ai.azure.com",
+			ModelID: "gpt-4o-mini", ContextWindow: 128000, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "github-models", ProviderName: "GitHub Models", BaseURL: "https://models.inference.ai.azure.com",
+			ModelID: "Llama-3.3-70B-Instruct", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "github-models", ProviderName: "GitHub Models", BaseURL: "https://models.inference.ai.azure.com",
+			ModelID: "DeepSeek-R1", ContextWindow: 128000, FreeTier: true, Source: "seed"},
 		// DeepSeek
-		{ProviderSlug: "deepseek", ProviderName: "DeepSeek", BaseURL: "https://api.deepseek.com/v1", ModelID: "deepseek-chat", ContextWindow: 128000, FreeTier: false, Source: "seed"},
-		{ProviderSlug: "deepseek", ProviderName: "DeepSeek", BaseURL: "https://api.deepseek.com/v1", ModelID: "deepseek-reasoner", ContextWindow: 128000, FreeTier: false, Source: "seed"},
+		{ProviderSlug: "deepseek", ProviderName: "DeepSeek", BaseURL: "https://api.deepseek.com/v1", ModelID: "deepseek-chat",
+			ContextWindow: 128000, FreeTier: false, Source: "seed"},
+		{ProviderSlug: "deepseek", ProviderName: "DeepSeek", BaseURL: "https://api.deepseek.com/v1",
+			ModelID: "deepseek-reasoner", ContextWindow: 128000, FreeTier: false, Source: "seed"},
 		// HuggingFace Router
-		{ProviderSlug: "huggingface", ProviderName: "HuggingFace Router", BaseURL: "https://router.huggingface.co/v1", ModelID: "Qwen/Qwen3-Coder-Next", ContextWindow: 262144, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "huggingface", ProviderName: "HuggingFace Router", BaseURL: "https://router.huggingface.co/v1", ModelID: "deepseek-ai/DeepSeek-V4-Flash", ContextWindow: 131072, FreeTier: true, Source: "seed"},
-		{ProviderSlug: "huggingface", ProviderName: "HuggingFace Router", BaseURL: "https://router.huggingface.co/v1", ModelID: "moonshotai/Kimi-K2.6", ContextWindow: 262144, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "huggingface", ProviderName: "HuggingFace Router", BaseURL: "https://router.huggingface.co/v1",
+			ModelID: "Qwen/Qwen3-Coder-Next", ContextWindow: 262144, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "huggingface", ProviderName: "HuggingFace Router", BaseURL: "https://router.huggingface.co/v1",
+			ModelID: "deepseek-ai/DeepSeek-V4-Flash", ContextWindow: 131072, FreeTier: true, Source: "seed"},
+		{ProviderSlug: "huggingface", ProviderName: "HuggingFace Router", BaseURL: "https://router.huggingface.co/v1",
+			ModelID: "moonshotai/Kimi-K2.6", ContextWindow: 262144, FreeTier: true, Source: "seed"},
 	}
 }
 
@@ -117,7 +156,8 @@ func (g *Gateway) seedInitialCatalog(ctx context.Context) error {
 	for _, entry := range curatedFreeCatalog() {
 		entryID := makeGatewayID("cat", entry.ProviderSlug, entry.ModelID)
 		_, execErr := tx.ExecContext(ctx, `
-INSERT OR IGNORE INTO ai_catalog (id, provider_slug, provider_name, base_url, model_id, context_window, free_tier, source, updated_at)
+INSERT OR IGNORE INTO ai_catalog (id, provider_slug, provider_name, base_url, model_id, context_window, free_tier,
+	source, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			entryID, entry.ProviderSlug, entry.ProviderName, entry.BaseURL, entry.ModelID,
 			entry.ContextWindow, boolToInt(entry.FreeTier), entry.Source, now,
@@ -233,7 +273,8 @@ func (g *Gateway) SniffUpstream(ctx context.Context) (SniffResult, error) {
 		uniqueProviders[entry.ProviderSlug] = true
 
 		_, execErr := tx.ExecContext(ctx, `
-INSERT INTO ai_catalog (id, provider_slug, provider_name, base_url, model_id, context_window, free_tier, source, updated_at)
+INSERT INTO ai_catalog (id, provider_slug, provider_name, base_url, model_id, context_window, free_tier, source,
+	updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   provider_slug = excluded.provider_slug,
@@ -503,7 +544,8 @@ func inferContextWindow(modelID string) int {
 		return 1048576
 	case strings.Contains(lower, "qwen3-coder"), strings.Contains(lower, "kimi-k2"), strings.Contains(lower, "codestral"):
 		return 262144
-	case strings.Contains(lower, "llama-3.3"), strings.Contains(lower, "llama-4"), strings.Contains(lower, "gpt-oss"), strings.Contains(lower, "deepseek"), strings.Contains(lower, "gemma-4"):
+	case strings.Contains(lower, "llama-3.3"), strings.Contains(lower, "llama-4"), strings.Contains(lower,
+		"gpt-oss"), strings.Contains(lower, "deepseek"), strings.Contains(lower, "gemma-4"):
 		return 131072
 	default:
 		return 128000

@@ -340,7 +340,8 @@ WHERE day_key IN (?, ?)`, today, yesterday)
 }
 
 // Award credits XP for a real action, enforces the 30m combo & 500 XP/24h bonus cap, and triggers Boss KOs.
-func (e *Engine) Award(ctx context.Context, eventType, label string, baseXP int, refID string, comboEligible bool) (XPActionEvent, error) {
+func (e *Engine) Award(ctx context.Context, eventType, label string, baseXP int, refID string,
+	comboEligible bool) (XPActionEvent, error) {
 	if baseXP <= 0 {
 		return XPActionEvent{}, nil
 	}
@@ -357,7 +358,8 @@ func (e *Engine) Award(ctx context.Context, eventType, label string, baseXP int,
 	return ev, nil
 }
 
-func (e *Engine) awardLocked(ctx context.Context, now time.Time, eventType, label string, baseXP int, refID string, comboEligible, allowBonus bool) (XPActionEvent, error) {
+func (e *Engine) awardLocked(ctx context.Context, now time.Time, eventType, label string, baseXP int, refID string,
+	comboEligible, allowBonus bool) (XPActionEvent, error) {
 	today := now.Format("2006-01-02")
 	yesterday := now.Add(-24 * time.Hour).Format("2006-01-02")
 
@@ -481,7 +483,8 @@ VALUES (?, ?, ?, ?, ?) ON CONFLICT(boss_id) DO NOTHING`,
 		if rowsAffected == 0 {
 			continue
 		}
-		ev, err := e.awardLocked(ctx, now, "boss_ko", fmt.Sprintf("Boss KO: %s / %s", b.Project, b.Milestone), BossKORewardXP, b.ID, false, false)
+		ev, err := e.awardLocked(ctx, now, "boss_ko", fmt.Sprintf("Boss KO: %s / %s", b.Project, b.Milestone), BossKORewardXP,
+			b.ID, false, false)
 		if err != nil {
 			return awardedKOs, err
 		}
@@ -567,7 +570,8 @@ FROM game_profile WHERE id = 'operator'`).Scan(&totalXP, &streakDays, &lastActio
 
 	activeMult := 1.0
 	if lastActionRaw != "" {
-		if prevTime, parseErr := time.Parse(time.RFC3339Nano, lastActionRaw); parseErr == nil && now.Sub(prevTime) <= ComboWindow && now.Sub(prevTime) >= 0 {
+		if prevTime, parseErr := time.Parse(time.RFC3339Nano,
+			lastActionRaw); parseErr == nil && now.Sub(prevTime) <= ComboWindow && now.Sub(prevTime) >= 0 {
 			activeMult = ComboMultiplier(comboCount)
 		} else {
 			comboCount = 0
@@ -810,13 +814,18 @@ func (e *Engine) buildBadges(ctx context.Context) []BadgeRecord {
 
 	catalog := []BadgeRecord{
 		{ID: "first_blood", Title: "FIRST BLOOD", Description: "Clear your first task bounty", StampColor: "#ff2e88"},
-		{ID: "combo_freak", Title: "OVERDRIVE 4X", Description: "Chain 3+ rapid actions in 30 minutes", StampColor: "#ffe031"},
-		{ID: "boss_breaker", Title: "BOSS SLAYER", Description: "Clear 100% of tasks in any milestone boss (+500 XP KO)", StampColor: "#a3ff12"},
+		{ID: "combo_freak", Title: "OVERDRIVE 4X", Description: "Chain 3+ rapid actions in 30 minutes",
+			StampColor: "#ffe031"},
+		{ID: "boss_breaker", Title: "BOSS SLAYER", Description: "Clear 100% of tasks in any milestone boss (+500 XP KO)",
+			StampColor: "#a3ff12"},
 		{ID: "zero_disk_monk", Title: "CLOUD VAULT", Description: "Store objects in the 9Drive pool", StampColor: "#00f0ff"},
-		{ID: "token_pirate", Title: "TOKEN PIRATE", Description: "Compress 10,000+ tokens with 9Router RTK", StampColor: "#ffe031"},
-		{ID: "gowa_operator", Title: "COMMS CHIEF", Description: "Connect a live WhatsApp GOWA device", StampColor: "#a3ff12"},
+		{ID: "token_pirate", Title: "TOKEN PIRATE", Description: "Compress 10,000+ tokens with 9Router RTK",
+			StampColor: "#ffe031"},
+		{ID: "gowa_operator", Title: "COMMS CHIEF", Description: "Connect a live WhatsApp GOWA device",
+			StampColor: "#a3ff12"},
 		{ID: "archive_master", Title: "CODEX KEEPER", Description: "Index 50+ docs in SQLite FTS5", StampColor: "#ff2e88"},
-		{ID: "quest_stamper", Title: "ARCADE STAMPER", Description: "Earn your first retro arcade stamp by clearing a daily quest", StampColor: "#3b82f6"},
+		{ID: "quest_stamper", Title: "ARCADE STAMPER",
+			Description: "Earn your first retro arcade stamp by clearing a daily quest", StampColor: "#3b82f6"},
 	}
 	for i := range catalog {
 		if ts, ok := unlockedAt[catalog[i].ID]; ok {
@@ -843,7 +852,8 @@ FROM game_events ORDER BY created_at DESC LIMIT ?`, limit)
 	events := make([]XPActionEvent, 0)
 	for rows.Next() {
 		var ev XPActionEvent
-		if rows.Scan(&ev.ID, &ev.EventType, &ev.Label, &ev.RefID, &ev.BaseXP, &ev.Multiplier, &ev.AwardedXP, &ev.CreatedAt) == nil {
+		if rows.Scan(&ev.ID, &ev.EventType, &ev.Label, &ev.RefID, &ev.BaseXP, &ev.Multiplier, &ev.AwardedXP,
+			&ev.CreatedAt) == nil {
 			events = append(events, ev)
 		}
 	}
@@ -885,7 +895,8 @@ INSERT INTO game_quest_claims (claim_key, quest_id, day_key, claimed_at) VALUES 
 		e.awardStampLocked(ctx, now, stamp.ID, stamp.QuestID, stamp.Title, stamp.Color)
 	}
 	e.unlockBadgeLocked(ctx, now, "quest_stamper")
-	ev, err := e.awardLocked(ctx, now, "quest_claim", "Quest Cleared: "+targetQuest.Title, targetQuest.RewardXP, targetQuest.ID, true, true)
+	ev, err := e.awardLocked(ctx, now, "quest_claim", "Quest Cleared: "+targetQuest.Title, targetQuest.RewardXP,
+		targetQuest.ID, true, true)
 	if err == nil {
 		_, _ = e.syncBossKOsLocked(ctx, now)
 		e.evaluateBadgesLocked(ctx, now)

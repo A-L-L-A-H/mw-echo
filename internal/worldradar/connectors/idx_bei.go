@@ -168,7 +168,8 @@ func (c *IDXBEIConnector) Acquire(_ context.Context, item DiscoveredItem) (Obser
 	_ = json.Unmarshal(rawPayload, &recMap)
 
 	recID := firstNonEmpty(getStringField(recMap, "record_id"), item.Metadata["record_id"])
-	datasetType := firstNonEmpty(getStringField(recMap, "dataset_type"), getStringField(recMap, "dataset"), item.Metadata["dataset_id"], c.DatasetID)
+	datasetType := firstNonEmpty(getStringField(recMap, "dataset_type"), getStringField(recMap, "dataset"),
+		item.Metadata["dataset_id"], c.DatasetID)
 	ticker := strings.ToUpper(firstNonEmpty(getStringField(recMap, "ticker"), item.Metadata["ticker"]))
 	company := getStringField(recMap, "company_name")
 	title := firstNonEmpty(getStringField(recMap, "title"), item.Title)

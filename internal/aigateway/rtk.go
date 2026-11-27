@@ -360,7 +360,8 @@ func capCharsPreserveHeadTail(text string, maxChars int) string {
 	if omittedChars <= 0 {
 		return text
 	}
-	return text[:headBudget] + fmt.Sprintf("\n[... RTK trimmed %d chars ...]\n", omittedChars) + text[len(text)-tailBudget:]
+	return text[:headBudget] + fmt.Sprintf("\n[... RTK trimmed %d chars ...]\n",
+		omittedChars) + text[len(text)-tailBudget:]
 }
 
 var (

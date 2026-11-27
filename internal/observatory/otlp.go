@@ -150,7 +150,8 @@ func (o *Observatory) insertEvents(ctx context.Context, events []EventRecord) er
 	defer func() { _ = tx.Rollback() }()
 
 	stmt, err := tx.PrepareContext(ctx, `
-INSERT INTO observatory_events (id, kind, service, agent, name, status, duration_ms, tokens_in, tokens_out, cost_usd, payload_json, created_at)
+INSERT INTO observatory_events (id, kind, service, agent, name, status, duration_ms, tokens_in, tokens_out, cost_usd,
+	payload_json, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
@@ -167,7 +168,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 		if ev.PayloadJSON == "" {
 			ev.PayloadJSON = "{}"
 		}
-		if _, err := stmt.ExecContext(ctx, ev.ID, ev.Kind, ev.Service, ev.Agent, ev.Name, ev.Status, ev.DurationMs, ev.TokensIn, ev.TokensOut, ev.CostUSD, ev.PayloadJSON, ev.CreatedAt); err != nil {
+		if _, err := stmt.ExecContext(ctx, ev.ID, ev.Kind, ev.Service, ev.Agent, ev.Name, ev.Status, ev.DurationMs,
+			ev.TokensIn, ev.TokensOut, ev.CostUSD, ev.PayloadJSON, ev.CreatedAt); err != nil {
 			return err
 		}
 	}
@@ -223,8 +225,10 @@ func (o *Observatory) handleOTLPTraces(c echo.Context) error {
 				if agent == "" {
 					agent = firstStringAttr(resAttrs, "gen_ai.agent.name", "mw.agent")
 				}
-				tokensIn := firstInt64Attr(spAttrs, "gen_ai.usage.input_tokens", "gen_ai.usage.prompt_tokens", "llm.token_count.prompt")
-				tokensOut := firstInt64Attr(spAttrs, "gen_ai.usage.output_tokens", "gen_ai.usage.completion_tokens", "llm.token_count.completion")
+				tokensIn := firstInt64Attr(spAttrs, "gen_ai.usage.input_tokens", "gen_ai.usage.prompt_tokens",
+					"llm.token_count.prompt")
+				tokensOut := firstInt64Attr(spAttrs, "gen_ai.usage.output_tokens", "gen_ai.usage.completion_tokens",
+					"llm.token_count.completion")
 				costUSD := firstFloatAttr(spAttrs, "gen_ai.usage.cost", "llm.cost_usd")
 
 				payloadBytes, _ := json.Marshal(map[string]any{
@@ -430,7 +434,8 @@ ORDER BY created_at DESC LIMIT ?`, whereSQL), args...)
 	events := make([]EventRecord, 0)
 	for rows.Next() {
 		var ev EventRecord
-		if err := rows.Scan(&ev.ID, &ev.Kind, &ev.Service, &ev.Agent, &ev.Name, &ev.Status, &ev.DurationMs, &ev.TokensIn, &ev.TokensOut, &ev.CostUSD, &ev.PayloadJSON, &ev.CreatedAt); err != nil {
+		if err := rows.Scan(&ev.ID, &ev.Kind, &ev.Service, &ev.Agent, &ev.Name, &ev.Status, &ev.DurationMs, &ev.TokensIn,
+			&ev.TokensOut, &ev.CostUSD, &ev.PayloadJSON, &ev.CreatedAt); err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		events = append(events, ev)

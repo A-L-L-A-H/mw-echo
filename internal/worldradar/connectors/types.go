@@ -266,7 +266,9 @@ func SanitizeMetadata(meta map[string]any) (map[string]any, bool) {
 	redacted := false
 	for k, v := range meta {
 		lk := strings.ToLower(k)
-		if strings.Contains(lk, "token") || strings.Contains(lk, "secret") || strings.Contains(lk, "password") || strings.Contains(lk, "api_key") || strings.Contains(lk, "apikey") || strings.Contains(lk, "authorization") {
+		if strings.Contains(lk, "token") || strings.Contains(lk, "secret") || strings.Contains(lk,
+			"password") || strings.Contains(lk, "api_key") || strings.Contains(lk, "apikey") || strings.Contains(lk,
+			"authorization") {
 			redacted = true
 			continue
 		}
@@ -377,7 +379,8 @@ func StandardNormalize(obs Observation, defaultDomains []string) (NormalizedObse
 	}, nil
 }
 
-func doHTTPGet(ctx context.Context, client *http.Client, targetURL string, headers map[string]string) (int, http.Header, []byte, error) {
+func doHTTPGet(ctx context.Context, client *http.Client, targetURL string, headers map[string]string) (int, http.Header,
+	[]byte, error) {
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}

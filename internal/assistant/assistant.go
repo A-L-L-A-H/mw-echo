@@ -332,7 +332,8 @@ SELECT total_xp, combo_count, last_action_at FROM game_profile WHERE id = 'opera
 		lc.XP = totalXP
 		lc.NextLevelXP = nextXP
 		if lastActionRaw != "" {
-			if prev, parseErr := time.Parse(time.RFC3339Nano, lastActionRaw); parseErr == nil && time.Since(prev) <= 30*time.Minute {
+			if prev, parseErr := time.Parse(time.RFC3339Nano,
+				lastActionRaw); parseErr == nil && time.Since(prev) <= 30*time.Minute {
 				lc.ComboMult = comboMultFromCount(comboCount)
 			}
 		}
@@ -408,7 +409,8 @@ func (s *Service) buildWorkspaceSnapshot(ctx context.Context) string {
 	sb.WriteString(live.Header + "\n")
 	sb.WriteString(fmt.Sprintf("LIVE METRICS: p0_pending=%d | docs_count=%d | 9router_tokens_saved=%d | 9router_cost_saved=$%.4f\n",
 		live.P0TasksPending, live.DocsCount, live.RouterTokensSaved, live.RouterCostSavedUSD))
-	sb.WriteString(fmt.Sprintf("HUB TELEMETRY: docs=%d tasks=%d storageObjects=%d\n", stats.DocsCount, stats.TasksCount, stats.StorageCount))
+	sb.WriteString(fmt.Sprintf("HUB TELEMETRY: docs=%d tasks=%d storageObjects=%d\n", stats.DocsCount, stats.TasksCount,
+		stats.StorageCount))
 	if s.hooks.GetGameSummary != nil {
 		if gameSummary := strings.TrimSpace(s.hooks.GetGameSummary(ctx)); gameSummary != "" {
 			sb.WriteString("RIOT RANK STATE: " + gameSummary + "\n")
@@ -417,7 +419,8 @@ func (s *Service) buildWorkspaceSnapshot(ctx context.Context) string {
 	if len(projects) > 0 {
 		sb.WriteString("PROJECTS:\n")
 		for _, proj := range projects {
-			sb.WriteString(fmt.Sprintf("- %s (%s): done=%d/%d (%.1f%%), docs=%d\n", proj.Slug, proj.Status, proj.DoneTasks, proj.TotalTasks, proj.ProgressPct, proj.DocsCount))
+			sb.WriteString(fmt.Sprintf("- %s (%s): done=%d/%d (%.1f%%), docs=%d\n", proj.Slug, proj.Status, proj.DoneTasks,
+				proj.TotalTasks, proj.ProgressPct, proj.DocsCount))
 		}
 	}
 	if len(openTasks) > 0 {
@@ -470,9 +473,10 @@ func assistantTools() []map[string]any {
 				"name":        "search_docs",
 				"description": "Search Codex Markdown docs via SQLite FTS5.",
 				"parameters": map[string]any{
-					"type":       "object",
-					"required":   []string{"query"},
-					"properties": map[string]any{"query": map[string]string{"type": "string"}, "project": map[string]string{"type": "string"}},
+					"type":     "object",
+					"required": []string{"query"},
+					"properties": map[string]any{"query": map[string]string{"type": "string"},
+						"project": map[string]string{"type": "string"}},
 				},
 			},
 		},
@@ -490,9 +494,10 @@ func assistantTools() []map[string]any {
 				"name":        "send_whatsapp",
 				"description": "Send a WhatsApp message via mw-echo native GOWA.",
 				"parameters": map[string]any{
-					"type":       "object",
-					"required":   []string{"phone", "message"},
-					"properties": map[string]any{"deviceId": map[string]string{"type": "string"}, "phone": map[string]string{"type": "string"}, "message": map[string]string{"type": "string"}},
+					"type":     "object",
+					"required": []string{"phone", "message"},
+					"properties": map[string]any{"deviceId": map[string]string{"type": "string"},
+						"phone": map[string]string{"type": "string"}, "message": map[string]string{"type": "string"}},
 				},
 			},
 		},
@@ -502,9 +507,10 @@ func assistantTools() []map[string]any {
 				"name":        "launch_coder_mission",
 				"description": "Spawn a Pi/OpenCode coding agent session inside a repository directory.",
 				"parameters": map[string]any{
-					"type":       "object",
-					"required":   []string{"workDir", "prompt"},
-					"properties": map[string]any{"workDir": map[string]string{"type": "string"}, "prompt": map[string]string{"type": "string"}},
+					"type":     "object",
+					"required": []string{"workDir", "prompt"},
+					"properties": map[string]any{"workDir": map[string]string{"type": "string"},
+						"prompt": map[string]string{"type": "string"}},
 				},
 			},
 		},
@@ -708,7 +714,8 @@ func (s *Service) Chat(ctx context.Context, personaID, userPrompt, modelOverride
 
 // DailyBrief asks TACTICIAN (or chosen persona) for a 3-bullet tactical briefing over live hub state.
 func (s *Service) DailyBrief(ctx context.Context, personaID string) (ChatMessage, error) {
-	return s.Chat(ctx, personaID, "Give a punchy 3-bullet tactical Mission Briefing based on the live workspace telemetry, active Boss Milestones, and top open tasks. Recommend the single highest-leverage next move.", "")
+	return s.Chat(ctx, personaID,
+		"Give a punchy 3-bullet tactical Mission Briefing based on the live workspace telemetry, active Boss Milestones, and top open tasks. Recommend the single highest-leverage next move.", "")
 }
 
 // RegisterRoutes attaches Shadow Sidekick routes under /api/assistant/*.

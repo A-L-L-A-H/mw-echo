@@ -363,7 +363,8 @@ FROM ai_agent_routes WHERE agent_id = ?`, agentID).Scan(
 }
 
 // UpdateAgentRoute creates or updates a Magpie per-agent model switchboard route.
-func (g *Gateway) UpdateAgentRoute(ctx context.Context, agentID string, input AgentRouteUpdateInput) (AgentRoute, error) {
+func (g *Gateway) UpdateAgentRoute(ctx context.Context, agentID string, input AgentRouteUpdateInput) (AgentRoute,
+	error) {
 	cleanID := strings.TrimSpace(strings.ToLower(agentID))
 	if cleanID == "" {
 		return AgentRoute{}, errors.New("agentId is required")
@@ -514,7 +515,8 @@ LIMIT 25`)
 
 // --- Core Routing Engine (Magpie + RTK + Exact Cache + Bifrost Failover) ---
 
-func (g *Gateway) resolveRoutePlan(ctx context.Context, explicitAgentHeader, defaultAgentID, requestedModel string) (string, string, string, bool) {
+func (g *Gateway) resolveRoutePlan(ctx context.Context, explicitAgentHeader, defaultAgentID,
+	requestedModel string) (string, string, string, bool) {
 	settings := g.GetSettings(ctx)
 
 	agentID := strings.TrimSpace(strings.ToLower(explicitAgentHeader))
@@ -560,12 +562,14 @@ func (g *Gateway) resolveRoutePlan(ctx context.Context, explicitAgentHeader, def
 	return agentID, effectiveModel, tierOrder, rtkActive
 }
 
-func (g *Gateway) routeCompletion(ctx context.Context, explicitAgentHeader, defaultAgentID, rtkMode string, incomingReq ChatCompletionRequest) (routeOutcome, error) {
+func (g *Gateway) routeCompletion(ctx context.Context, explicitAgentHeader, defaultAgentID, rtkMode string,
+	incomingReq ChatCompletionRequest) (routeOutcome, error) {
 	startedAt := time.Now()
 	requestedModel := strings.TrimSpace(incomingReq.Model)
 	settings := g.GetSettings(ctx)
 
-	agentID, effectiveModel, tierOrder, rtkActive := g.resolveRoutePlan(ctx, explicitAgentHeader, defaultAgentID, requestedModel)
+	agentID, effectiveModel, tierOrder, rtkActive := g.resolveRoutePlan(ctx, explicitAgentHeader, defaultAgentID,
+		requestedModel)
 
 	outboundReq := incomingReq
 	outboundReq.Model = effectiveModel
@@ -582,7 +586,8 @@ func (g *Gateway) routeCompletion(ctx context.Context, explicitAgentHeader, defa
 	}
 
 	// Exact SQLite response cache check for deterministic non-streaming requests.
-	cacheEligible := settings.CacheEnabled && !outboundReq.Stream && (outboundReq.Temperature == nil || *outboundReq.Temperature <= 0.2)
+	cacheEligible := settings.CacheEnabled && !outboundReq.Stream &&
+		(outboundReq.Temperature == nil || *outboundReq.Temperature <= 0.2)
 	cacheKey := ""
 	if cacheEligible {
 		cacheKey = computePromptCacheKey(agentID, outboundReq)
@@ -731,7 +736,8 @@ func (g *Gateway) routeCompletion(ctx context.Context, explicitAgentHeader, defa
 	return routeOutcome{}, lastCallErr
 }
 
-func (g *Gateway) selectCandidateProviders(ctx context.Context, effectiveModel, tierOrder string) ([]storedProvider, error) {
+func (g *Gateway) selectCandidateProviders(ctx context.Context, effectiveModel, tierOrder string) ([]storedProvider,
+	error) {
 	enabledProviders, err := g.loadStoredProviders(ctx, true)
 	if err != nil {
 		return nil, err
@@ -818,7 +824,8 @@ func pickProviderModel(provider storedProvider, requestedModel string) string {
 	return trimmed
 }
 
-func (g *Gateway) dispatchProvider(ctx context.Context, provider storedProvider, apiKey string, req ChatCompletionRequest) ([]byte, ChatCompletionResponse, error) {
+func (g *Gateway) dispatchProvider(ctx context.Context, provider storedProvider, apiKey string,
+	req ChatCompletionRequest) ([]byte, ChatCompletionResponse, error) {
 	switch provider.Kind {
 	case KindAnthropic:
 		return g.dispatchAnthropicUpstream(ctx, provider, apiKey, req)
@@ -832,7 +839,8 @@ func (g *Gateway) dispatchProvider(ctx context.Context, provider storedProvider,
 	}
 }
 
-func (g *Gateway) dispatchOpenAICompatUpstream(ctx context.Context, provider storedProvider, apiKey string, req ChatCompletionRequest) ([]byte, ChatCompletionResponse, error) {
+func (g *Gateway) dispatchOpenAICompatUpstream(ctx context.Context, provider storedProvider, apiKey string,
+	req ChatCompletionRequest) ([]byte, ChatCompletionResponse, error) {
 	endpoint := strings.TrimRight(provider.BaseURL, "/")
 	if !strings.HasSuffix(endpoint, "/chat/completions") {
 		endpoint += "/chat/completions"
@@ -879,7 +887,8 @@ func (g *Gateway) dispatchOpenAICompatUpstream(ctx context.Context, provider sto
 			Cooldown:   true,
 		}
 	}
-	if httpResp.StatusCode >= 500 || httpResp.StatusCode == http.StatusUnauthorized || httpResp.StatusCode == http.StatusForbidden {
+	if httpResp.StatusCode >= 500 || httpResp.StatusCode == http.StatusUnauthorized ||
+		httpResp.StatusCode == http.StatusForbidden {
 		return nil, ChatCompletionResponse{}, &upstreamCallError{
 			StatusCode: httpResp.StatusCode,
 			Body:       string(respBytes),
@@ -905,7 +914,8 @@ func (g *Gateway) dispatchOpenAICompatUpstream(ctx context.Context, provider sto
 	return respBytes, parsed, nil
 }
 
-func (g *Gateway) dispatchAnthropicUpstream(ctx context.Context, provider storedProvider, apiKey string, req ChatCompletionRequest) ([]byte, ChatCompletionResponse, error) {
+func (g *Gateway) dispatchAnthropicUpstream(ctx context.Context, provider storedProvider, apiKey string,
+	req ChatCompletionRequest) ([]byte, ChatCompletionResponse, error) {
 	endpoint := strings.TrimRight(provider.BaseURL, "/")
 	if !strings.HasSuffix(endpoint, "/messages") {
 		if strings.HasSuffix(endpoint, "/v1") {
@@ -933,34 +943,42 @@ func (g *Gateway) dispatchAnthropicUpstream(ctx context.Context, provider stored
 
 	httpResp, err := g.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: http.StatusBadGateway, Body: err.Error(), Retryable: true}
+		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: http.StatusBadGateway, Body: err.Error(),
+			Retryable: true}
 	}
 	defer httpResp.Body.Close()
 
 	respBytes, readErr := io.ReadAll(io.LimitReader(httpResp.Body, 16*1024*1024))
 	if readErr != nil {
-		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: http.StatusBadGateway, Body: readErr.Error(), Retryable: true}
+		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: http.StatusBadGateway, Body: readErr.Error(),
+			Retryable: true}
 	}
 	if httpResp.StatusCode == http.StatusTooManyRequests {
-		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(respBytes), Retryable: true, Cooldown: true}
+		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(respBytes),
+			Retryable: true, Cooldown: true}
 	}
-	if httpResp.StatusCode >= 500 || httpResp.StatusCode == http.StatusUnauthorized || httpResp.StatusCode == http.StatusForbidden {
-		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(respBytes), Retryable: true}
+	if httpResp.StatusCode >= 500 || httpResp.StatusCode == http.StatusUnauthorized ||
+		httpResp.StatusCode == http.StatusForbidden {
+		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(respBytes),
+			Retryable: true}
 	}
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
-		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(respBytes), Retryable: false}
+		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(respBytes),
+			Retryable: false}
 	}
 
 	var anthResp AnthropicMessageResponse
 	if err := json.Unmarshal(respBytes, &anthResp); err != nil {
-		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: http.StatusBadGateway, Body: err.Error(), Retryable: true}
+		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: http.StatusBadGateway, Body: err.Error(),
+			Retryable: true}
 	}
 	converted := anthropicToOpenAIResponse(anthResp, req.Model)
 	encoded, _ := json.Marshal(converted)
 	return encoded, converted, nil
 }
 
-func (g *Gateway) dispatchGeminiNativeUpstream(ctx context.Context, provider storedProvider, apiKey string, req ChatCompletionRequest) ([]byte, ChatCompletionResponse, error) {
+func (g *Gateway) dispatchGeminiNativeUpstream(ctx context.Context, provider storedProvider, apiKey string,
+	req ChatCompletionRequest) ([]byte, ChatCompletionResponse, error) {
 	endpoint := fmt.Sprintf("%s/models/%s:generateContent", strings.TrimRight(provider.BaseURL, "/"), req.Model)
 	if apiKey != "" {
 		endpoint += "?key=" + apiKey
@@ -999,22 +1017,28 @@ func (g *Gateway) dispatchGeminiNativeUpstream(ctx context.Context, provider sto
 
 	httpResp, err := g.httpClient.Do(httpReq)
 	if err != nil {
-		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: http.StatusBadGateway, Body: err.Error(), Retryable: true}
+		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: http.StatusBadGateway, Body: err.Error(),
+			Retryable: true}
 	}
 	defer httpResp.Body.Close()
 
 	respBytes, readErr := io.ReadAll(io.LimitReader(httpResp.Body, 16*1024*1024))
 	if readErr != nil {
-		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: http.StatusBadGateway, Body: readErr.Error(), Retryable: true}
+		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: http.StatusBadGateway, Body: readErr.Error(),
+			Retryable: true}
 	}
 	if httpResp.StatusCode == http.StatusTooManyRequests {
-		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(respBytes), Retryable: true, Cooldown: true}
+		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(respBytes),
+			Retryable: true, Cooldown: true}
 	}
-	if httpResp.StatusCode >= 500 || httpResp.StatusCode == http.StatusUnauthorized || httpResp.StatusCode == http.StatusForbidden {
-		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(respBytes), Retryable: true}
+	if httpResp.StatusCode >= 500 || httpResp.StatusCode == http.StatusUnauthorized ||
+		httpResp.StatusCode == http.StatusForbidden {
+		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(respBytes),
+			Retryable: true}
 	}
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
-		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(respBytes), Retryable: false}
+		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(respBytes),
+			Retryable: false}
 	}
 
 	var geminiEnvelope struct {
@@ -1032,7 +1056,8 @@ func (g *Gateway) dispatchGeminiNativeUpstream(ctx context.Context, provider sto
 		} `json:"usageMetadata"`
 	}
 	if err := json.Unmarshal(respBytes, &geminiEnvelope); err != nil {
-		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: http.StatusBadGateway, Body: err.Error(), Retryable: true}
+		return nil, ChatCompletionResponse{}, &upstreamCallError{StatusCode: http.StatusBadGateway, Body: err.Error(),
+			Retryable: true}
 	}
 
 	var replyBuilder strings.Builder
@@ -1496,7 +1521,8 @@ func (g *Gateway) handleChatCompletions(c echo.Context) error {
 	return c.Blob(http.StatusOK, "application/json; charset=utf-8", outcome.RawBody)
 }
 
-func (g *Gateway) handleStreamingChatCompletion(c echo.Context, agentHeader, rtkMode string, incomingReq ChatCompletionRequest) error {
+func (g *Gateway) handleStreamingChatCompletion(c echo.Context, agentHeader, rtkMode string,
+	incomingReq ChatCompletionRequest) error {
 	ctx := c.Request().Context()
 	startedAt := time.Now()
 	requestedModel := strings.TrimSpace(incomingReq.Model)
@@ -1528,7 +1554,8 @@ func (g *Gateway) handleStreamingChatCompletion(c echo.Context, agentHeader, rtk
 
 	var lastErr error
 	for _, candidate := range candidates {
-		if candidate.Kind != KindOpenAICompat && !(candidate.Kind == KindGemini && strings.Contains(strings.ToLower(candidate.BaseURL), "/openai")) {
+		if candidate.Kind != KindOpenAICompat && !(candidate.Kind == KindGemini &&
+			strings.Contains(strings.ToLower(candidate.BaseURL), "/openai")) {
 			continue
 		}
 		resolvedModel := pickProviderModel(candidate, effectiveModel)
@@ -1571,11 +1598,13 @@ func (g *Gateway) handleStreamingChatCompletion(c echo.Context, agentHeader, rtk
 		if httpResp.StatusCode == http.StatusTooManyRequests {
 			bodyBytes, _ := io.ReadAll(io.LimitReader(httpResp.Body, 64*1024))
 			_ = httpResp.Body.Close()
-			lastErr = &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(bodyBytes), Retryable: true, Cooldown: true}
+			lastErr = &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(bodyBytes), Retryable: true,
+				Cooldown: true}
 			g.recordProviderError(ctx, candidate.ID, true)
 			continue
 		}
-		if httpResp.StatusCode >= 500 || httpResp.StatusCode == http.StatusUnauthorized || httpResp.StatusCode == http.StatusForbidden {
+		if httpResp.StatusCode >= 500 || httpResp.StatusCode == http.StatusUnauthorized ||
+			httpResp.StatusCode == http.StatusForbidden {
 			bodyBytes, _ := io.ReadAll(io.LimitReader(httpResp.Body, 64*1024))
 			_ = httpResp.Body.Close()
 			lastErr = &upstreamCallError{StatusCode: httpResp.StatusCode, Body: string(bodyBytes), Retryable: true}

@@ -57,14 +57,16 @@ const worldradarRegisterSourceSchema = `{
     "source_tier": { "type": "string", "enum": ["A","B","C","D","E","F","G","X"] },
     "category": { "type": "string" },
     "trust_base": { "type": "number", "minimum": 0, "maximum": 1 },
-    "collection_method": { "type": "string", "enum": ["pull","push","public_api","document_drop","sensor_stream","manual"] },
+    "collection_method": { "type": "string",
+    	"enum": ["pull","push","public_api","document_drop","sensor_stream","manual"] },
     "license_class": { "type": "string" },
     "language_hint": { "type": "string" },
     "geography_scope": { "type": "string", "enum": ["global","regional","local","unknown"] },
     "independence_group": { "type": "string" },
     "config_json": { "type": "string" }
   },
-  "required": ["instance_id", "source_tier", "category", "trust_base", "collection_method", "license_class", "geography_scope", "config_json"]
+  "required": ["instance_id", "source_tier", "category", "trust_base", "collection_method", "license_class",
+  	"geography_scope", "config_json"]
 }`
 
 const worldradarTriggerIngestSchema = `{

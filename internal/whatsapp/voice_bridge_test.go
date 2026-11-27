@@ -21,7 +21,8 @@ func TestVoiceBridgeAllowlistFailClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := bridge.Transcribe(context.Background(), "999@s.whatsapp.net", "", "", []byte("a")); !errors.Is(err, ErrVoiceSenderNotAllowed) {
+	if _, err := bridge.Transcribe(context.Background(), "999@s.whatsapp.net", "", "", []byte("a")); !errors.Is(err,
+		ErrVoiceSenderNotAllowed) {
 		t.Fatalf("expected denial, got %v", err)
 	}
 	if hits.Load() != 0 {
@@ -42,7 +43,8 @@ func TestVoiceBridgeEmptyAllowlistAndGatewayErrors(t *testing.T) {
 	}))
 	defer srv.Close()
 	empty, _ := NewVoiceBridge(VoiceBridgeConfig{GatewayURL: srv.URL})
-	if _, err := empty.Transcribe(context.Background(), "1", "", "", []byte("a")); !errors.Is(err, ErrVoiceSenderNotAllowed) {
+	if _, err := empty.Transcribe(context.Background(), "1", "", "", []byte("a")); !errors.Is(err,
+		ErrVoiceSenderNotAllowed) {
 		t.Fatalf("empty allowlist must deny, got %v", err)
 	}
 	open, _ := NewVoiceBridge(VoiceBridgeConfig{GatewayURL: srv.URL, AllowedSenders: []string{"1"}})

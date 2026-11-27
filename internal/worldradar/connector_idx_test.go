@@ -94,7 +94,8 @@ func TestIDXBEIConnector_AnnouncementsStocksETagAndIngestion(t *testing.T) {
 			stockRec.ImpactHint, stockRec.UrgencyHint, annRec.ImpactHint, annRec.UrgencyHint)
 	}
 	if stockRec.ImpactHint < 0.70 || stockRec.UrgencyHint < 0.75 {
-		t.Fatalf("expected scaled abnormal hints (>=0.70, >=0.75), got (%.2f, %.2f)", stockRec.ImpactHint, stockRec.UrgencyHint)
+		t.Fatalf("expected scaled abnormal hints (>=0.70, >=0.75), got (%.2f, %.2f)", stockRec.ImpactHint,
+			stockRec.UrgencyHint)
 	}
 
 	var stockPayload struct {

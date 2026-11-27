@@ -635,7 +635,8 @@ func (e *Engine) RunPrompt(ctx context.Context, sessionID, prompt string) (TurnR
 }
 
 // RunPromptWithCallback executes a prompt turn while streaming AgentEvents to onEvent and SSE subscribers.
-func (e *Engine) RunPromptWithCallback(ctx context.Context, sessionID, prompt string, onEvent func(AgentEvent)) (TurnResult, error) {
+func (e *Engine) RunPromptWithCallback(ctx context.Context, sessionID, prompt string,
+	onEvent func(AgentEvent)) (TurnResult, error) {
 	turnCtx, release, err := e.acquireTurn(ctx, sessionID)
 	if err != nil {
 		return TurnResult{}, err
@@ -664,7 +665,8 @@ func (e *Engine) StartPromptAsync(sessionID, prompt string) error {
 }
 
 // RunOneShot creates an ephemeral session in SQLite and runs a single coding agent prompt for CLI workflows (`mw-echo code`).
-func (e *Engine) RunOneShot(ctx context.Context, workDir, agentProfile, model, mode, prompt string, onEvent func(AgentEvent)) (string, error) {
+func (e *Engine) RunOneShot(ctx context.Context, workDir, agentProfile, model, mode, prompt string,
+	onEvent func(AgentEvent)) (string, error) {
 	trimmedPrompt := strings.TrimSpace(prompt)
 	if trimmedPrompt == "" {
 		return "", errors.New("prompt is required")
@@ -686,7 +688,8 @@ func (e *Engine) RunOneShot(ctx context.Context, workDir, agentProfile, model, m
 	return outcome.Reply, nil
 }
 
-func (e *Engine) executeAcquiredTurn(turnCtx context.Context, sessionID, rawPrompt string, onEvent func(AgentEvent)) (TurnResult, error) {
+func (e *Engine) executeAcquiredTurn(turnCtx context.Context, sessionID, rawPrompt string,
+	onEvent func(AgentEvent)) (TurnResult, error) {
 	trimmedPrompt := strings.TrimSpace(rawPrompt)
 	if trimmedPrompt == "" {
 		return TurnResult{}, errors.New("prompt is required")
@@ -772,7 +775,8 @@ func (e *Engine) executeAcquiredTurn(turnCtx context.Context, sessionID, rawProm
 		}
 
 		// Record token & RTK usage on the session.
-		if err := e.addSessionTelemetry(context.Background(), session.ID, int64(gwMeta.TokensIn), int64(gwMeta.TokensOut), int64(gwMeta.RTKTokensSaved)); err != nil {
+		if err := e.addSessionTelemetry(context.Background(), session.ID, int64(gwMeta.TokensIn), int64(gwMeta.TokensOut),
+			int64(gwMeta.RTKTokensSaved)); err != nil {
 			return e.finishErroredTurn(session.ID, executedSteps, err, onEvent)
 		}
 
@@ -936,7 +940,8 @@ func (e *Engine) executeAcquiredTurn(turnCtx context.Context, sessionID, rawProm
 	}, nil
 }
 
-func (e *Engine) handleSlashCommand(ctx context.Context, session Session, prompt string, onEvent func(AgentEvent)) (bool, TurnResult, string, Session, error) {
+func (e *Engine) handleSlashCommand(ctx context.Context, session Session, prompt string,
+	onEvent func(AgentEvent)) (bool, TurnResult, string, Session, error) {
 	if !strings.HasPrefix(prompt, "/") {
 		return false, TurnResult{}, prompt, session, nil
 	}
@@ -975,8 +980,10 @@ func (e *Engine) handleSlashCommand(ctx context.Context, session Session, prompt
 		if err != nil {
 			return false, TurnResult{}, "", updated, err
 		}
-		e.emitEvent(AgentEvent{Type: "assistant_message", SessionID: updated.ID, Role: "assistant", Mode: updated.Mode, Message: &ackMsg, Content: ackReply, Reply: ackReply}, onEvent)
-		e.emitEvent(AgentEvent{Type: "turn_end", SessionID: updated.ID, Role: "assistant", Mode: updated.Mode, Content: ackReply, Reply: ackReply}, onEvent)
+		e.emitEvent(AgentEvent{Type: "assistant_message", SessionID: updated.ID, Role: "assistant", Mode: updated.Mode,
+			Message: &ackMsg, Content: ackReply, Reply: ackReply}, onEvent)
+		e.emitEvent(AgentEvent{Type: "turn_end", SessionID: updated.ID, Role: "assistant", Mode: updated.Mode,
+			Content: ackReply, Reply: ackReply}, onEvent)
 
 		latestSession, latestMsgs, err := e.GetSessionWithMessages(ctx, updated.ID)
 		if err != nil {
@@ -990,12 +997,15 @@ func (e *Engine) handleSlashCommand(ctx context.Context, session Session, prompt
 		if err != nil {
 			return false, TurnResult{}, "", session, err
 		}
-		ackReply := fmt.Sprintf("Compacted session history (%d messages kept).\n%s", compacted.KeptMessages, compacted.Summary)
+		ackReply := fmt.Sprintf("Compacted session history (%d messages kept).\n%s", compacted.KeptMessages,
+			compacted.Summary)
 		if !compacted.Compacted {
 			ackReply = compacted.Summary
 		}
-		e.emitEvent(AgentEvent{Type: "assistant_message", SessionID: session.ID, Role: "assistant", Mode: session.Mode, Content: ackReply, Reply: ackReply}, onEvent)
-		e.emitEvent(AgentEvent{Type: "turn_end", SessionID: session.ID, Role: "assistant", Mode: session.Mode, Content: ackReply, Reply: ackReply}, onEvent)
+		e.emitEvent(AgentEvent{Type: "assistant_message", SessionID: session.ID, Role: "assistant", Mode: session.Mode,
+			Content: ackReply, Reply: ackReply}, onEvent)
+		e.emitEvent(AgentEvent{Type: "turn_end", SessionID: session.ID, Role: "assistant", Mode: session.Mode,
+			Content: ackReply, Reply: ackReply}, onEvent)
 
 		latestSession, latestMsgs, err := e.GetSessionWithMessages(ctx, session.ID)
 		if err != nil {
@@ -1026,7 +1036,8 @@ func (e *Engine) finishAbortedTurn(sessionID string, steps int, onEvent func(Age
 	}, context.Canceled
 }
 
-func (e *Engine) finishErroredTurn(sessionID string, steps int, turnErr error, onEvent func(AgentEvent)) (TurnResult, error) {
+func (e *Engine) finishErroredTurn(sessionID string, steps int, turnErr error, onEvent func(AgentEvent)) (TurnResult,
+	error) {
 	_ = e.setSessionStatus(context.Background(), sessionID, StatusError)
 	session, messages, _ := e.GetSessionWithMessages(context.Background(), sessionID)
 	e.emitEvent(AgentEvent{
@@ -1197,7 +1208,8 @@ func (e *Engine) callGatewayCompletion(
 		return parsedAssistantTurn{}, MessageMeta{}, fmt.Errorf("read gateway response: %w", readErr)
 	}
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {
-		return parsedAssistantTurn{}, MessageMeta{}, fmt.Errorf("gateway HTTP %d: %s", httpResp.StatusCode, condenseText(string(respBody), 300))
+		return parsedAssistantTurn{}, MessageMeta{}, fmt.Errorf("gateway HTTP %d: %s", httpResp.StatusCode,
+			condenseText(string(respBody), 300))
 	}
 
 	var envelope struct {

@@ -94,14 +94,16 @@ func TestOTLPIngestStatsDiscoveryAndRepoRadar(t *testing.T) {
 	_ = os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755)
 	_ = os.MkdirAll(filepath.Join(repoDir, "docs", "tasks"), 0o755)
 	_ = os.WriteFile(filepath.Join(repoDir, ".git", "HEAD"), []byte("ref: refs/heads/dev\n"), 0o644)
-	_ = os.WriteFile(filepath.Join(repoDir, ".git", "config"), []byte("[remote \"origin\"]\n\turl = https://github.com/example/sample-project.git\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(repoDir, ".git", "config"),
+		[]byte("[remote \"origin\"]\n\turl = https://github.com/example/sample-project.git\n"), 0o644)
 	_ = os.WriteFile(filepath.Join(repoDir, "docs", "tasks", "tasks.json"), []byte(`{}`), 0o644)
 
 	repos, err := obs.ScanRepos(context.Background(), []string{rootDir})
 	if err != nil {
 		t.Fatalf("scan repos: %v", err)
 	}
-	if len(repos) != 1 || repos[0].Name != "sample-project" || repos[0].Branch != "dev" || !repos[0].HasTasksJSON || !repos[0].HasDocs {
+	if len(repos) != 1 || repos[0].Name != "sample-project" || repos[0].Branch != "dev" || !repos[0].HasTasksJSON ||
+		!repos[0].HasDocs {
 		t.Fatalf("unexpected repo radar output: %+v", repos)
 	}
 }

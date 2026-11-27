@@ -320,7 +320,8 @@ func NewConfidenceScorer(cfg ScorerConfig) *ConfidenceScorer {
 }
 
 // Score computes [0,1] confidence and its confidence band.
-func (s *ConfidenceScorer) Score(sourceTrust float64, distinctGroups int, provenanceDepth int, extractionQuality float64, temporalValid bool, contested bool) (float64, string) {
+func (s *ConfidenceScorer) Score(sourceTrust float64, distinctGroups int, provenanceDepth int,
+	extractionQuality float64, temporalValid bool, contested bool) (float64, string) {
 	corrob := math.Min(1.0, 0.40+0.30*float64(maxInt(distinctGroups-1, 0)))
 	if distinctGroups <= 0 {
 		corrob = 0.20
@@ -567,7 +568,8 @@ func (e *RadarEngine) CreateInstance(ctx context.Context, req InstanceCreateRequ
 	nowStr := e.now().Format(time.RFC3339Nano)
 
 	_, err := e.DB.ExecContext(ctx, `
-INSERT INTO radar_instances (instance_id, name, description, version, taxonomy_version, config_json, status, created_at, updated_at, valid_from, valid_to)
+INSERT INTO radar_instances (instance_id, name, description, version, taxonomy_version, config_json, status, created_at,
+	updated_at, valid_from, valid_to)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 		instID, req.Name, req.Description, version, taxVer, cfgJSON, status, nowStr, nowStr, nowStr,
 	)
@@ -585,7 +587,8 @@ SELECT instance_id, name, COALESCE(description,''), version, taxonomy_version, c
 FROM radar_instances WHERE instance_id = ?`, strings.TrimSpace(instanceID))
 	var inst SpecInstance
 	var validTo sql.NullString
-	if err := row.Scan(&inst.InstanceID, &inst.Name, &inst.Description, &inst.Version, &inst.TaxonomyVersion, &inst.ConfigJSON, &inst.Status, &inst.CreatedAt, &inst.UpdatedAt, &inst.ValidFrom, &validTo); err != nil {
+	if err := row.Scan(&inst.InstanceID, &inst.Name, &inst.Description, &inst.Version, &inst.TaxonomyVersion,
+		&inst.ConfigJSON, &inst.Status, &inst.CreatedAt, &inst.UpdatedAt, &inst.ValidFrom, &validTo); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("%w: instance %q", ErrNotFound, instanceID)
 		}
@@ -611,7 +614,8 @@ FROM radar_instances ORDER BY created_at DESC`)
 	for rows.Next() {
 		var inst SpecInstance
 		var validTo sql.NullString
-		if err := rows.Scan(&inst.InstanceID, &inst.Name, &inst.Description, &inst.Version, &inst.TaxonomyVersion, &inst.ConfigJSON, &inst.Status, &inst.CreatedAt, &inst.UpdatedAt, &inst.ValidFrom, &validTo); err != nil {
+		if err := rows.Scan(&inst.InstanceID, &inst.Name, &inst.Description, &inst.Version, &inst.TaxonomyVersion,
+			&inst.ConfigJSON, &inst.Status, &inst.CreatedAt, &inst.UpdatedAt, &inst.ValidFrom, &validTo); err != nil {
 			return nil, err
 		}
 		if validTo.Valid {
@@ -664,7 +668,8 @@ func (e *RadarEngine) RegisterSource(cfg SourceConfig) (string, error) {
 
 	_, err := e.DB.ExecContext(ctx, `
 INSERT INTO radar_sources
-  (source_id, instance_id, source_tier, category, trust_base, collection_method, license_class, language_hint, geography_scope, status, independence_group, config_json, created_at, updated_at, valid_from, valid_to)
+  (source_id, instance_id, source_tier, category, trust_base, collection_method, license_class, language_hint,
+  	geography_scope, status, independence_group, config_json, created_at, updated_at, valid_from, valid_to)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 		sourceID, cfg.InstanceID, tier, cfg.Category, cfg.TrustBase, cfg.CollectionMethod,
 		license, cfg.LanguageHint, cfg.GeographyScope, status, indGroup, cfgJSON,
@@ -680,7 +685,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 		e.SourceConnectors[sourceID] = conn
 		e.mu.Unlock()
 	}
-	e.recordAudit(ctx, "source", sourceID, "create", "system", "", sanitizeConfigJSON(cfgJSON), "source registered", nowStr)
+	e.recordAudit(ctx, "source", sourceID, "create", "system", "", sanitizeConfigJSON(cfgJSON), "source registered",
+		nowStr)
 	return sourceID, nil
 }
 
@@ -759,7 +765,8 @@ func (e *RadarEngine) ListSources(ctx context.Context, instanceID, status string
 	for rows.Next() {
 		var s SpecSource
 		var validTo sql.NullString
-		if err := rows.Scan(&s.SourceID, &s.InstanceID, &s.SourceTier, &s.Category, &s.TrustBase, &s.CollectionMethod, &s.LicenseClass, &s.LanguageHint, &s.GeographyScope, &s.Status, &s.IndependenceGroup, &s.ConfigJSON, &s.CreatedAt, &s.UpdatedAt, &s.ValidFrom, &validTo); err != nil {
+		if err := rows.Scan(&s.SourceID, &s.InstanceID, &s.SourceTier, &s.Category, &s.TrustBase, &s.CollectionMethod,
+			&s.LicenseClass, &s.LanguageHint, &s.GeographyScope, &s.Status, &s.IndependenceGroup, &s.ConfigJSON, &s.CreatedAt, &s.UpdatedAt, &s.ValidFrom, &validTo); err != nil {
 			return nil, err
 		}
 		if validTo.Valid {
@@ -777,7 +784,8 @@ SELECT source_id, instance_id, source_tier, category, trust_base, collection_met
 FROM radar_sources WHERE source_id = ?`, strings.TrimSpace(sourceID))
 	var s SpecSource
 	var validTo sql.NullString
-	if err := row.Scan(&s.SourceID, &s.InstanceID, &s.SourceTier, &s.Category, &s.TrustBase, &s.CollectionMethod, &s.LicenseClass, &s.LanguageHint, &s.GeographyScope, &s.Status, &s.IndependenceGroup, &s.ConfigJSON, &s.CreatedAt, &s.UpdatedAt, &s.ValidFrom, &validTo); err != nil {
+	if err := row.Scan(&s.SourceID, &s.InstanceID, &s.SourceTier, &s.Category, &s.TrustBase, &s.CollectionMethod,
+		&s.LicenseClass, &s.LanguageHint, &s.GeographyScope, &s.Status, &s.IndependenceGroup, &s.ConfigJSON, &s.CreatedAt, &s.UpdatedAt, &s.ValidFrom, &validTo); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return SpecSource{}, fmt.Errorf("%w: source %q", ErrNotFound, sourceID)
 		}
@@ -825,7 +833,8 @@ func (e *RadarEngine) SetCheckpoint(ctx context.Context, sourceID string, cp con
 		lastSeenStr = cp.LastSeenAt.UTC().Format(time.RFC3339Nano)
 	}
 	_, err := e.DB.ExecContext(ctx, `
-INSERT INTO radar_checkpoints (source_id, connector_type, cursor, last_seen_at, item_count, hash, created_at, updated_at, valid_from, valid_to)
+INSERT INTO radar_checkpoints (source_id, connector_type, cursor, last_seen_at, item_count, hash, created_at,
+	updated_at, valid_from, valid_to)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
 ON CONFLICT(source_id) DO UPDATE SET
   connector_type = excluded.connector_type,
@@ -983,7 +992,8 @@ func buildBatchCursor(ctype connectors.ConnectorType, item connectors.Discovered
 	}
 }
 
-func (e *RadarEngine) persistNormalizedObservation(ctx context.Context, src SpecSource, rawObs connectors.Observation, normObs connectors.NormalizedObservation) error {
+func (e *RadarEngine) persistNormalizedObservation(ctx context.Context, src SpecSource, rawObs connectors.Observation,
+	normObs connectors.NormalizedObservation) error {
 	nowStr := e.now().Format(time.RFC3339Nano)
 	obsID := normObs.ObservationID
 
@@ -1030,7 +1040,8 @@ func (e *RadarEngine) persistNormalizedObservation(ctx context.Context, src Spec
 
 	_, err = e.DB.ExecContext(ctx, `
 INSERT INTO radar_observations
-  (observation_id, source_id, source_version, captured_at, published_at, observed_at, canonical_url, content_hash, raw_hash, language, payload_type, license_class, validation_state, raw_payload, metadata_json, created_at, updated_at, valid_from, valid_to)
+  (observation_id, source_id, source_version, captured_at, published_at, observed_at, canonical_url, content_hash,
+  	raw_hash, language, payload_type, license_class, validation_state, raw_payload, metadata_json, created_at, updated_at, valid_from, valid_to)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 		obsID, src.SourceID, normObs.SourceVersion, capturedStr, publishedStr, observedStr,
 		normObs.CanonicalURL, normObs.ContentHash, normObs.RawHash, normObs.Language,
@@ -1045,7 +1056,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 	reasonsBytes, _ := json.Marshal(normObs.ReasonCodes)
 	_, err = e.DB.ExecContext(ctx, `
 INSERT INTO radar_provenance
-  (provenance_id, observation_id, source_id, source_version, capture_method, captured_at, canonical_url, raw_hash, content_hash, parser_version, normalizer_version, dedupe_version, scorer_version, transform_parents_json, extracted_at, license_class, privacy_class, reason_codes_json, created_at, updated_at, valid_from, valid_to)
+  (provenance_id, observation_id, source_id, source_version, capture_method, captured_at, canonical_url, raw_hash,
+  	content_hash, parser_version, normalizer_version, dedupe_version, scorer_version, transform_parents_json, extracted_at, license_class, privacy_class, reason_codes_json, created_at, updated_at, valid_from, valid_to)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'v1.0.0', 'v1.0.0', 'v1.0.0', ?, '[]', ?, ?, ?, ?, ?, ?, ?, NULL)`,
 		provID, obsID, src.SourceID, normObs.SourceVersion, src.CollectionMethod, capturedStr,
 		normObs.CanonicalURL, normObs.RawHash, normObs.ContentHash, e.Config.Scorer.Version,
@@ -1060,7 +1072,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'v1.0.0', 'v1.0.0', 'v1.0.0', ?, '[]', ?, ?, 
 		e.Metrics.mu.Lock()
 		e.Metrics.QuarantinedCount++
 		e.Metrics.mu.Unlock()
-		e.recordAudit(ctx, "observation", obsID, "quarantine", "connector", "", string(reasonsBytes), "validation "+normObs.ValidationState, nowStr)
+		e.recordAudit(ctx, "observation", obsID, "quarantine", "connector", "", string(reasonsBytes),
+			"validation "+normObs.ValidationState, nowStr)
 		return nil
 	}
 
@@ -1071,14 +1084,16 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'v1.0.0', 'v1.0.0', 'v1.0.0', ?, '[]', ?, ?, 
 	return e.processDerivedClaimAndEvent(ctx, src, obsID, normObs, nowStr)
 }
 
-func (e *RadarEngine) processDerivedClaimAndEvent(ctx context.Context, src SpecSource, obsID string, normObs connectors.NormalizedObservation, nowStr string) error {
+func (e *RadarEngine) processDerivedClaimAndEvent(ctx context.Context, src SpecSource, obsID string,
+	normObs connectors.NormalizedObservation, nowStr string) error {
 	isRetraction := false
 	if normObs.Metadata != nil {
 		if r, ok := normObs.Metadata["retracted"].(bool); ok && r {
 			isRetraction = true
 		}
 	}
-	if strings.Contains(strings.ToLower(normObs.Title), "retraction:") || strings.HasPrefix(strings.ToLower(normObs.Title), "retract ") {
+	if strings.Contains(strings.ToLower(normObs.Title), "retraction:") || strings.HasPrefix(strings.ToLower(normObs.Title),
+		"retract ") {
 		isRetraction = true
 	}
 
@@ -1111,7 +1126,8 @@ func (e *RadarEngine) processDerivedClaimAndEvent(ctx context.Context, src SpecS
 
 	_, err := e.DB.ExecContext(ctx, `
 INSERT INTO radar_claims
-  (claim_id, observation_id, claim_type, claim_text, entities_json, metrics_json, time_range_start, time_range_end, place_json, confidence, confidence_band, extractor_version, created_at, updated_at, valid_from, valid_to)
+  (claim_id, observation_id, claim_type, claim_text, entities_json, metrics_json, time_range_start, time_range_end,
+  	place_json, confidence, confidence_band, extractor_version, created_at, updated_at, valid_from, valid_to)
 VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, 'v1.0.0', ?, ?, ?, NULL)`,
 		claimID, obsID, claimType, claimText, string(entitiesJSON), metricsJSON,
 		pubStr, placeJSON, claimConf, claimBand, nowStr, nowStr, pubStr,
@@ -1139,7 +1155,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, 'v1.0.0', ?, ?, ?, NULL)`,
 		}
 		_, err := e.DB.ExecContext(ctx, `
 INSERT INTO radar_events
-  (event_id, event_type, event_status, time_range_start, time_range_end, place_json, actors_json, claims_json, metrics_json, topics_json, confidence, confidence_band, version, scorer_version, created_at, updated_at, valid_from, valid_to)
+  (event_id, event_type, event_status, time_range_start, time_range_end, place_json, actors_json, claims_json,
+  	metrics_json, topics_json, confidence, confidence_band, version, scorer_version, created_at, updated_at, valid_from, valid_to)
 VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, NULL)`,
 			eventID, claimType, status, pubStr, placeJSON, string(entitiesJSON),
 			string(claimsArr), metricsJSON, string(topicsJSON), claimConf, claimBand,
@@ -1188,7 +1205,8 @@ VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, NULL)`,
 		newVersion := matchedEvent.Version + 1
 		_, err := e.DB.ExecContext(ctx, `
 INSERT INTO radar_events
-  (event_id, event_type, event_status, time_range_start, time_range_end, place_json, actors_json, claims_json, metrics_json, topics_json, confidence, confidence_band, version, scorer_version, created_at, updated_at, valid_from, valid_to)
+  (event_id, event_type, event_status, time_range_start, time_range_end, place_json, actors_json, claims_json,
+  	metrics_json, topics_json, confidence, confidence_band, version, scorer_version, created_at, updated_at, valid_from, valid_to)
 VALUES (?, ?, 'retracted', ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 			newEventID, matchedEvent.EventType, matchedEvent.TimeRangeStart, matchedEvent.PlaceJSON,
 			string(mergedActorsJSON), string(mergedClaimsJSON), string(mergedMetricsBytes),
@@ -1198,7 +1216,8 @@ VALUES (?, ?, 'retracted', ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 		if err != nil {
 			return fmt.Errorf("insert retracted event version: %w", err)
 		}
-		e.recordAudit(ctx, "event", newEventID, "retract", src.SourceID, matchedEvent.EventID, string(mergedClaimsJSON), "authoritative retraction", nowStr)
+		e.recordAudit(ctx, "event", newEventID, "retract", src.SourceID, matchedEvent.EventID, string(mergedClaimsJSON),
+			"authoritative retraction", nowStr)
 		return nil
 	}
 
@@ -1222,7 +1241,8 @@ WHERE event_id = ?`,
 	return nil
 }
 
-func (e *RadarEngine) findMatchingCurrentEvent(ctx context.Context, claimText string, normObs connectors.NormalizedObservation) (*SpecEvent, error) {
+func (e *RadarEngine) findMatchingCurrentEvent(ctx context.Context, claimText string,
+	normObs connectors.NormalizedObservation) (*SpecEvent, error) {
 	// If retracting a specific target ID, match directly.
 	retractsID := ""
 	if normObs.Metadata != nil {
@@ -1592,7 +1612,8 @@ ORDER BY o.created_at ASC, o.observation_id ASC`)
 	var loaded []obsRow
 	for rows.Next() {
 		var r obsRow
-		if err := rows.Scan(&r.obsID, &r.srcID, &r.srcVer, &r.capStr, &r.pubStr, &r.obsStr, &r.url, &r.cHash, &r.rHash, &r.lang, &r.pType, &r.lic, &r.valState, &r.metaJSON, &r.createdAt); err != nil {
+		if err := rows.Scan(&r.obsID, &r.srcID, &r.srcVer, &r.capStr, &r.pubStr, &r.obsStr, &r.url, &r.cHash, &r.rHash,
+			&r.lang, &r.pType, &r.lic, &r.valState, &r.metaJSON, &r.createdAt); err != nil {
 			return err
 		}
 		loaded = append(loaded, r)
@@ -1691,7 +1712,8 @@ WHERE metadata_json LIKE ?`,
 		return err
 	}
 
-	e.recordAudit(ctx, "privacy", "erasure", "erase_pii", "operator", "", "[ERASED]", "GDPR/privacy erasure propagated", nowStr)
+	e.recordAudit(ctx, "privacy", "erasure", "erase_pii", "operator", "", "[ERASED]", "GDPR/privacy erasure propagated",
+		nowStr)
 	return nil
 }
 
@@ -1703,7 +1725,8 @@ SELECT claim_id, observation_id, claim_type, claim_text, entities_json, COALESCE
 FROM radar_claims WHERE claim_id = ?`, cid)
 		var c SpecClaim
 		var validTo sql.NullString
-		err := row.Scan(&c.ClaimID, &c.ObservationID, &c.ClaimType, &c.ClaimText, &c.EntitiesJSON, &c.MetricsJSON, &c.TimeRangeStart, &c.TimeRangeEnd, &c.PlaceJSON, &c.Confidence, &c.ConfidenceBand, &c.ExtractorVersion, &c.CreatedAt, &c.UpdatedAt, &c.ValidFrom, &validTo)
+		err := row.Scan(&c.ClaimID, &c.ObservationID, &c.ClaimType, &c.ClaimText, &c.EntitiesJSON, &c.MetricsJSON,
+			&c.TimeRangeStart, &c.TimeRangeEnd, &c.PlaceJSON, &c.Confidence, &c.ConfidenceBand, &c.ExtractorVersion, &c.CreatedAt, &c.UpdatedAt, &c.ValidFrom, &validTo)
 		if errors.Is(err, sql.ErrNoRows) {
 			continue
 		}
@@ -1734,7 +1757,8 @@ WHERE c.claim_id = ?`, cid)
 		for rows.Next() {
 			var p ProvenanceRecord
 			var validTo sql.NullString
-			if scanErr := rows.Scan(&p.ProvenanceID, &p.ObservationID, &p.SourceID, &p.SourceVersion, &p.CaptureMethod, &p.CapturedAt, &p.CanonicalURL, &p.RawHash, &p.ContentHash, &p.ParserVersion, &p.NormalizerVersion, &p.DedupeVersion, &p.ScorerVersion, &p.TransformParentsJSON, &p.ExtractedAt, &p.LicenseClass, &p.PrivacyClass, &p.ReasonCodesJSON, &p.CreatedAt, &p.UpdatedAt, &p.ValidFrom, &validTo); scanErr != nil {
+			if scanErr := rows.Scan(&p.ProvenanceID, &p.ObservationID, &p.SourceID, &p.SourceVersion, &p.CaptureMethod,
+				&p.CapturedAt, &p.CanonicalURL, &p.RawHash, &p.ContentHash, &p.ParserVersion, &p.NormalizerVersion, &p.DedupeVersion, &p.ScorerVersion, &p.TransformParentsJSON, &p.ExtractedAt, &p.LicenseClass, &p.PrivacyClass, &p.ReasonCodesJSON, &p.CreatedAt, &p.UpdatedAt, &p.ValidFrom, &validTo); scanErr != nil {
 				rows.Close()
 				return nil, scanErr
 			}
@@ -1752,10 +1776,12 @@ WHERE c.claim_id = ?`, cid)
 	return out, nil
 }
 
-func (e *RadarEngine) recordAudit(ctx context.Context, entityType, entityID, action, actor, beforeJSON, afterJSON, reason, nowStr string) {
+func (e *RadarEngine) recordAudit(ctx context.Context, entityType, entityID, action, actor, beforeJSON, afterJSON,
+	reason, nowStr string) {
 	auditID := newUUIDv7()
 	_, _ = e.DB.ExecContext(ctx, `
-INSERT INTO radar_audit_logs (audit_id, entity_type, entity_id, action, actor, before_json, after_json, reason, created_at, updated_at, valid_from, valid_to)
+INSERT INTO radar_audit_logs (audit_id, entity_type, entity_id, action, actor, before_json, after_json, reason,
+	created_at, updated_at, valid_from, valid_to)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 		auditID, entityType, entityID, action, actor, beforeJSON, afterJSON, reason, nowStr, nowStr, nowStr,
 	)

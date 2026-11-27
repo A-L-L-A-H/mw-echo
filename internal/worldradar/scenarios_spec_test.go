@@ -245,7 +245,8 @@ func TestSC02_MultiSourceCrossDedupe(t *testing.T) {
 		CollectionMethod: "pull", LicenseClass: "redistribute_allowed", GeographyScope: "global",
 		IndependenceGroup: "grp-rss", ConfigJSON: string(rssCfg),
 	})
-	eng.RegisterSourceConnector(srcSynd, &connectors.RSSConnector{SourceID: srcSynd, FeedURL: rssSrv.URL, HTTPClient: rssSrv.Client()})
+	eng.RegisterSourceConnector(srcSynd, &connectors.RSSConnector{SourceID: srcSynd, FeedURL: rssSrv.URL,
+		HTTPClient: rssSrv.Client()})
 	_ = eng.TriggerIngestion(srcSynd)
 	syndPage, _ := eng.QueryEvents(worldradar.EventQuery{})
 	if len(syndPage.Events) != 1 {
@@ -341,7 +342,8 @@ func TestSC03_ConflictDetection(t *testing.T) {
 		t.Fatalf("expected event_status='contested', got %q", ev.EventStatus)
 	}
 	if ev.Confidence >= uncontestedConf {
-		t.Fatalf("expected contradiction penalty to reduce confidence: before=%.4f after=%.4f", uncontestedConf, ev.Confidence)
+		t.Fatalf("expected contradiction penalty to reduce confidence: before=%.4f after=%.4f", uncontestedConf,
+			ev.Confidence)
 	}
 	detail, _ := eng.GetEvent(ev.EventID)
 	if len(detail.Claims) != 2 {
@@ -412,7 +414,8 @@ func TestSC04_RetractionHandling(t *testing.T) {
 
 	detail, _ := eng.GetEvent(cur.EventID)
 	if len(detail.Claims) != 2 || len(detail.Provenance) != 2 {
-		t.Fatalf("expected both original and retraction claims/provenance preserved, got claims=%d prov=%d", len(detail.Claims), len(detail.Provenance))
+		t.Fatalf("expected both original and retraction claims/provenance preserved, got claims=%d prov=%d",
+			len(detail.Claims), len(detail.Provenance))
 	}
 	var rawObsCount int
 	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM radar_observations WHERE source_id = ?`, srcID).Scan(&rawObsCount)
@@ -514,10 +517,12 @@ type cancelingAfterNConnector struct {
 }
 
 func (c *cancelingAfterNConnector) Type() connectors.ConnectorType { return c.inner.Type() }
-func (c *cancelingAfterNConnector) Discover(ctx context.Context, cp connectors.Checkpoint) ([]connectors.DiscoveredItem, connectors.Checkpoint, error) {
+func (c *cancelingAfterNConnector) Discover(ctx context.Context, cp connectors.Checkpoint) ([]connectors.DiscoveredItem,
+	connectors.Checkpoint, error) {
 	return c.inner.Discover(ctx, cp)
 }
-func (c *cancelingAfterNConnector) Acquire(ctx context.Context, item connectors.DiscoveredItem) (connectors.Observation, error) {
+func (c *cancelingAfterNConnector) Acquire(ctx context.Context, item connectors.DiscoveredItem) (connectors.Observation,
+	error) {
 	c.count++
 	if c.count > c.limit {
 		c.cancel()
@@ -628,7 +633,8 @@ func TestSC07_PrivacyGate(t *testing.T) {
 
 	var metaJSON string
 	_ = db.QueryRowContext(ctx, `SELECT metadata_json FROM radar_observations WHERE source_id = ?`, srcID).Scan(&metaJSON)
-	if strings.Contains(metaJSON, "alice@example.com") || strings.Contains(metaJSON, "415-555-0199") || strings.Contains(metaJSON, "@witness_jane") || strings.Contains(metaJSON, "123 Market St") {
+	if strings.Contains(metaJSON, "alice@example.com") || strings.Contains(metaJSON,
+		"415-555-0199") || strings.Contains(metaJSON, "@witness_jane") || strings.Contains(metaJSON, "123 Market St") {
 		t.Fatalf("raw PII leaked into normalized metadata: %s", metaJSON)
 	}
 	if !strings.Contains(metaJSON, "[REDACTED]") || !strings.Contains(metaJSON, "anon_") {
@@ -788,7 +794,8 @@ func TestSC09_FullReplay(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing observation %s after replay", obsID)
 		}
-		if prev.Status != ev.EventStatus || prev.Topics != ev.TopicsJSON || prev.Conf != ev.Confidence || prev.Band != ev.ConfidenceBand || prev.Ver != ev.Version {
+		if prev.Status != ev.EventStatus || prev.Topics != ev.TopicsJSON || prev.Conf != ev.Confidence ||
+			prev.Band != ev.ConfidenceBand || prev.Ver != ev.Version {
 			t.Fatalf("replay mismatch for %s: before=%+v after=%+v", obsID, prev, ev)
 		}
 		if len(det.Provenance) != 1 {

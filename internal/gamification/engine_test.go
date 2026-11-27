@@ -140,8 +140,10 @@ func TestBossBattleAutoGenerationAndKOReward(t *testing.T) {
 	hub, eng := openTestEngine(t, gamification.TelemetryHook{})
 	ctx := context.Background()
 
-	_, _ = hub.UpsertTask(ctx, store.TaskRecord{Code: "BOSS-1", Project: "riot-app", Milestone: "Act 1", Title: "Defeat bug", Priority: "p0", Status: "done"})
-	_, _ = hub.UpsertTask(ctx, store.TaskRecord{Code: "BOSS-2", Project: "riot-app", Milestone: "Act 1", Title: "Ship feature", Priority: "p1", Status: "todo"})
+	_, _ = hub.UpsertTask(ctx, store.TaskRecord{Code: "BOSS-1", Project: "riot-app", Milestone: "Act 1",
+		Title: "Defeat bug", Priority: "p0", Status: "done"})
+	_, _ = hub.UpsertTask(ctx, store.TaskRecord{Code: "BOSS-2", Project: "riot-app", Milestone: "Act 1",
+		Title: "Ship feature", Priority: "p1", Status: "todo"})
 
 	prof, err := eng.Profile(ctx)
 	if err != nil {

@@ -31,7 +31,8 @@ func openTestHub(t *testing.T) *store.HubStore {
 	return hub
 }
 
-func makeCompletionPayload(modelName, content string, toolCalls []ToolCall, promptTok, completionTok int) map[string]any {
+func makeCompletionPayload(modelName, content string, toolCalls []ToolCall, promptTok,
+	completionTok int) map[string]any {
 	msgObj := map[string]any{
 		"role":    "assistant",
 		"content": content,
@@ -140,7 +141,8 @@ func TestReActMultiTurnToolLoopAndGatewayHeaders(t *testing.T) {
 				},
 			}, 210, 35))
 		default:
-			_ = json.NewEncoder(writer).Encode(makeCompletionPayload("mock-coder-1", "Updated Greeting constant in app.go.", nil, 250, 18))
+			_ = json.NewEncoder(writer).Encode(makeCompletionPayload("mock-coder-1", "Updated Greeting constant in app.go.", nil,
+				250, 18))
 		}
 	}))
 	defer mockGateway.Close()
@@ -154,9 +156,10 @@ func TestReActMultiTurnToolLoopAndGatewayHeaders(t *testing.T) {
 	}
 
 	var observedTypes []string
-	reply, err := engine.RunOneShot(context.Background(), workDir, "", "", ModeAct, "Update Greeting in app.go", func(ev AgentEvent) {
-		observedTypes = append(observedTypes, ev.Type)
-	})
+	reply, err := engine.RunOneShot(context.Background(), workDir, "", "", ModeAct, "Update Greeting in app.go",
+		func(ev AgentEvent) {
+			observedTypes = append(observedTypes, ev.Type)
+		})
 	if err != nil {
 		t.Fatalf("RunOneShot failed: %v", err)
 	}
@@ -224,7 +227,8 @@ func TestReActMultiTurnToolLoopAndGatewayHeaders(t *testing.T) {
 
 	// Verify event lifecycle sequence contains core events.
 	joinedEvents := strings.Join(observedTypes, ",")
-	for _, requiredEvent := range []string{"turn_start", "step", "tool_call", "tool_result", "assistant_message", "turn_end"} {
+	for _, requiredEvent := range []string{"turn_start", "step", "tool_call", "tool_result", "assistant_message",
+		"turn_end"} {
 		if !strings.Contains(joinedEvents, requiredEvent) {
 			t.Fatalf("expected event %q in stream: %s", requiredEvent, joinedEvents)
 		}
@@ -601,7 +605,8 @@ func TestHTTPRoutesEndToEndAndSSE(t *testing.T) {
 
 	// 3. POST /api/agent/sessions/:id/prompt (sync)
 	promptPayload := []byte(`{"prompt":"Hello from HTTP test","async":false}`)
-	promptResp, err := client.Post(apiServer.URL+"/api/agent/sessions/"+createdSession.ID+"/prompt", "application/json", bytes.NewReader(promptPayload))
+	promptResp, err := client.Post(apiServer.URL+"/api/agent/sessions/"+createdSession.ID+"/prompt", "application/json",
+		bytes.NewReader(promptPayload))
 	if err != nil || promptResp.StatusCode != http.StatusOK {
 		t.Fatalf("POST /prompt failed: err=%v status=%d", err, promptResp.StatusCode)
 	}
@@ -660,7 +665,8 @@ func TestHTTPRoutesEndToEndAndSSE(t *testing.T) {
 	// 7. SSE stream + async prompt delivery
 	sseCtx, cancelSSE := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancelSSE()
-	sseReq, _ := http.NewRequestWithContext(sseCtx, http.MethodGet, apiServer.URL+"/api/agent/sessions/"+forkedSession.ID+"/events", nil)
+	sseReq, _ := http.NewRequestWithContext(sseCtx, http.MethodGet,
+		apiServer.URL+"/api/agent/sessions/"+forkedSession.ID+"/events", nil)
 	sseResp, err := client.Do(sseReq)
 	if err != nil || sseResp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /events failed: err=%v", err)

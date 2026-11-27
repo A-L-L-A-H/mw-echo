@@ -261,7 +261,8 @@ WHERE device_id = ?`, status, jid, jid, now, cleanID)
 	return err
 }
 
-func (m *Manager) updateDeviceConfigRow(ctx context.Context, deviceID string, patch DeviceConfigPatch) (DeviceRecord, error) {
+func (m *Manager) updateDeviceConfigRow(ctx context.Context, deviceID string, patch DeviceConfigPatch) (DeviceRecord,
+	error) {
 	existing, err := m.getDeviceRow(ctx, deviceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		existing, err = m.upsertDeviceRow(ctx, deviceID, "")
@@ -598,7 +599,8 @@ FROM wa_media WHERE media_id = ?`, strings.TrimSpace(mediaID)).Scan(
 	return meta, nil
 }
 
-func (m *Manager) listInboxRows(ctx context.Context, deviceID, chatJID, searchQuery string, limit, offset int) ([]MessageRecord, int, error) {
+func (m *Manager) listInboxRows(ctx context.Context, deviceID, chatJID, searchQuery string, limit,
+	offset int) ([]MessageRecord, int, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}

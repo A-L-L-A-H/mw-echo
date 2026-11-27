@@ -65,7 +65,8 @@ func TestClassifyIntent_BilingualIDAndEN(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := ClassifyIntent(tc.msg)
 			if got.Domain != tc.wantDomain {
-				t.Fatalf("ClassifyIntent(%q).Domain = %s, want %s (signals=%v)", tc.msg, got.Domain, tc.wantDomain, got.MatchedSignals)
+				t.Fatalf("ClassifyIntent(%q).Domain = %s, want %s (signals=%v)", tc.msg, got.Domain, tc.wantDomain,
+					got.MatchedSignals)
 			}
 			if got.Language != tc.wantLang {
 				t.Fatalf("ClassifyIntent(%q).Language = %s, want %s", tc.msg, got.Language, tc.wantLang)
@@ -247,7 +248,8 @@ func TestEmailTicketBridge_CloudflareInboundToMWXVAndResendACK(t *testing.T) {
 		t.Fatalf("expected Resend ACK sent, got %+v", outcome)
 	}
 	if receivedTicket.Category != DomainISP || receivedTicket.Priority != "P1" {
-		t.Fatalf("expected ISP P1 ticket classification, got category=%s priority=%s", receivedTicket.Category, receivedTicket.Priority)
+		t.Fatalf("expected ISP P1 ticket classification, got category=%s priority=%s", receivedTicket.Category,
+			receivedTicket.Priority)
 	}
 	if !strings.Contains(resendPayload["subject"].(string), outcome.Ticket.TicketRef) {
 		t.Fatalf("Resend ACK subject missing ticket reference: %v", resendPayload["subject"])

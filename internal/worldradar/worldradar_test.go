@@ -276,7 +276,8 @@ func TestScenario3_EmptyFeedAnd304ReturnNoNewDataWithoutFakeEvents(t *testing.T)
 	if err != nil {
 		t.Fatalf("first run: %v", err)
 	}
-	if firstRun.Status != worldradar.RunStatusNoNewData || firstRun.TargetReports[0].Status != worldradar.RunStatusNoNewData {
+	if firstRun.Status != worldradar.RunStatusNoNewData ||
+		firstRun.TargetReports[0].Status != worldradar.RunStatusNoNewData {
 		t.Fatalf("expected no_new_data on empty feed, got %+v", firstRun)
 	}
 
@@ -284,7 +285,8 @@ func TestScenario3_EmptyFeedAnd304ReturnNoNewDataWithoutFakeEvents(t *testing.T)
 	if err != nil {
 		t.Fatalf("second run: %v", err)
 	}
-	if secondRun.Status != worldradar.RunStatusNoNewData || secondRun.TargetReports[0].Status != worldradar.RunStatusNoNewData {
+	if secondRun.Status != worldradar.RunStatusNoNewData ||
+		secondRun.TargetReports[0].Status != worldradar.RunStatusNoNewData {
 		t.Fatalf("expected no_new_data on 304, got %+v", secondRun)
 	}
 
@@ -346,7 +348,8 @@ func TestScenario4_RateLimit429PreservesCursorAndRecordsConnectorHealth(t *testi
 	if err != nil {
 		t.Fatalf("list connector health: %v", err)
 	}
-	if len(healthList) != 1 || healthList[0].LastStatus != worldradar.RunStatusRateLimited || healthList[0].RateLimitedUntil == "" {
+	if len(healthList) != 1 || healthList[0].LastStatus != worldradar.RunStatusRateLimited ||
+		healthList[0].RateLimitedUntil == "" {
 		t.Fatalf("expected rate_limited connector health with rate_limited_until, got %+v", healthList)
 	}
 
@@ -434,7 +437,8 @@ func TestScenario5_StrictEntityResolutionDoesNotBlindlyMerge(t *testing.T) {
 	}
 	// ent-1 (LEI:1111) + ent-4 (LEI:1111) merge -> 1; ent-2 (LEI:2222) -> 2; ent-3 (missing) -> 3.
 	if len(entities) != 3 {
-		t.Fatalf("expected 3 separate Acme Corp entities (only matching name+strongId merges), got %d: %+v", len(entities), entities)
+		t.Fatalf("expected 3 separate Acme Corp entities (only matching name+strongId merges), got %d: %+v", len(entities),
+			entities)
 	}
 
 	reviewCount := 0

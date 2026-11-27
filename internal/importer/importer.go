@@ -46,7 +46,8 @@ var assetExtensions = map[string]bool{
 const maxMarkdownBytes = 2 * 1024 * 1024
 const maxAssetBytes = 50 * 1024 * 1024
 
-func ImportDocsDirectory(ctx context.Context, hub *store.HubStore, project, docsRoot string, includeAssets bool) (ImportSummary, error) {
+func ImportDocsDirectory(ctx context.Context, hub *store.HubStore, project, docsRoot string,
+	includeAssets bool) (ImportSummary, error) {
 	absRoot, err := filepath.Abs(docsRoot)
 	if err != nil {
 		return ImportSummary{}, err
@@ -178,7 +179,8 @@ func ImportTaskosFile(ctx context.Context, hub *store.HubStore, tasksJSONPath st
 	return imported, nil
 }
 
-func ImportRepo(ctx context.Context, hub *store.HubStore, project, repoRoot string, includeAssets bool) (ImportSummary, error) {
+func ImportRepo(ctx context.Context, hub *store.HubStore, project, repoRoot string, includeAssets bool) (ImportSummary,
+	error) {
 	absRepo, err := filepath.Abs(repoRoot)
 	if err != nil {
 		return ImportSummary{}, err

@@ -220,7 +220,8 @@ func buildIDXStockRecord(stockQuote idxStockQuote, feedURI string, now time.Time
 		strongID = "IDX:" + upperTicker
 	}
 
-	title := fmt.Sprintf("IDX:%s %s (%+.2f%%, vol %.2fx)", upperTicker, companyName, stockQuote.ChangePct, stockQuote.VolumeRatio)
+	title := fmt.Sprintf("IDX:%s %s (%+.2f%%, vol %.2fx)", upperTicker, companyName, stockQuote.ChangePct,
+		stockQuote.VolumeRatio)
 	summary := fmt.Sprintf("IDX stock %s (%s) lastPrice=%.2f changePct=%+.2f%% volumeRatio=%.2fx",
 		upperTicker, companyName, stockQuote.LastPrice, stockQuote.ChangePct, stockQuote.VolumeRatio)
 

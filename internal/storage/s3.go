@@ -90,7 +90,8 @@ func (c *S3Client) signV4(req *http.Request, canonicalURI string, payload []byte
 	req.Header.Set("x-amz-content-sha256", payloadHash)
 	req.Header.Set("Host", req.URL.Host)
 
-	canonicalHeaders := fmt.Sprintf("host:%s\nx-amz-content-sha256:%s\nx-amz-date:%s\n", req.URL.Host, payloadHash, amzDate)
+	canonicalHeaders := fmt.Sprintf("host:%s\nx-amz-content-sha256:%s\nx-amz-date:%s\n", req.URL.Host, payloadHash,
+		amzDate)
 	signedHeaders := "host;x-amz-content-sha256;x-amz-date"
 	canonicalRequest := strings.Join([]string{
 		req.Method,
@@ -203,7 +204,8 @@ func (c *S3Client) HeadBucket(ctx context.Context) error {
 	}
 	canonicalURI := "/" + url.PathEscape(c.cfg.Bucket)
 	targetURL := c.cfg.Endpoint + canonicalURI
-	if !c.cfg.ForcePathStyle && !strings.Contains(parsed.Host, "127.0.0.1") && !strings.Contains(parsed.Host, "localhost") {
+	if !c.cfg.ForcePathStyle && !strings.Contains(parsed.Host, "127.0.0.1") && !strings.Contains(parsed.Host,
+		"localhost") {
 		canonicalURI = "/"
 		targetURL = parsed.Scheme + "://" + c.cfg.Bucket + "." + parsed.Host + "/"
 	}

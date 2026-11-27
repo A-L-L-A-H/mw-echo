@@ -361,7 +361,8 @@ func (e *Engine) CreateInstance(ctx context.Context, input CreateInstanceInput) 
 		if err := ValidatePack(pack); err != nil {
 			return RadarInstance{}, fmt.Errorf("%w: %v", ErrValidation, err)
 		}
-		return e.createValidatedInstance(ctx, pack, firstNonEmpty(input.Name, pack.Name), firstNonEmpty(input.Mode, pack.DefaultMode, "monitor"))
+		return e.createValidatedInstance(ctx, pack, firstNonEmpty(input.Name, pack.Name), firstNonEmpty(input.Mode,
+			pack.DefaultMode, "monitor"))
 	}
 
 	custom := PackManifest{
@@ -378,7 +379,8 @@ func (e *Engine) CreateInstance(ctx context.Context, input CreateInstanceInput) 
 	return e.createValidatedInstance(ctx, custom, custom.Name, custom.DefaultMode)
 }
 
-func (e *Engine) createValidatedInstance(ctx context.Context, pack PackManifest, name, mode string) (RadarInstance, error) {
+func (e *Engine) createValidatedInstance(ctx context.Context, pack PackManifest, name, mode string) (RadarInstance,
+	error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	instID := makeID("inst", pack.ID, name, now)
 	configPayload, _ := json.Marshal(map[string]any{
@@ -502,7 +504,8 @@ func (e *Engine) AddWatchTarget(ctx context.Context, instanceID string, input Wa
 	targetID := makeID("tgt", instanceID, connectorID, sourceURI, now)
 	_, err := e.hub.DB().ExecContext(ctx, `
 INSERT INTO radar_watch_targets
-  (id, instance_id, target_type, canonical_name, connector_id, source_uri, independence_group, etag, cursor, enabled, created_at)
+  (id, instance_id, target_type, canonical_name, connector_id, source_uri, independence_group, etag, cursor, enabled,
+  	created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?)`,
 		targetID, instanceID, targetType, canonicalName, connectorID, sourceURI, indGroup, strings.TrimSpace(input.Cursor), enabled, now,
 	)
@@ -590,7 +593,8 @@ func (e *Engine) RunInstance(ctx context.Context, instanceID string) (RunSummary
 
 		if limitedUntil, isLimited := e.isConnectorRateLimited(ctx, target.ConnectorID, tgtStart); isLimited {
 			msg := "rate-limit backoff active until " + limitedUntil
-			e.recordCollectionRun(ctx, inst.ID, target.ID, RunStatusRateLimited, 0, msg, tgtStart.Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano))
+			e.recordCollectionRun(ctx, inst.ID, target.ID, RunStatusRateLimited, 0, msg, tgtStart.Format(time.RFC3339Nano),
+				time.Now().UTC().Format(time.RFC3339Nano))
 			summary.TargetReports = append(summary.TargetReports, TargetRunReport{
 				TargetID:     target.ID,
 				ConnectorID:  target.ConnectorID,
@@ -603,7 +607,8 @@ func (e *Engine) RunInstance(ctx context.Context, instanceID string) (RunSummary
 		connector, ok := e.connectors.Get(target.ConnectorID)
 		if !ok {
 			msg := "missing connector " + target.ConnectorID
-			e.recordCollectionRun(ctx, inst.ID, target.ID, RunStatusConnectorFailed, 0, msg, tgtStart.Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano))
+			e.recordCollectionRun(ctx, inst.ID, target.ID, RunStatusConnectorFailed, 0, msg, tgtStart.Format(time.RFC3339Nano),
+				time.Now().UTC().Format(time.RFC3339Nano))
 			summary.TargetReports = append(summary.TargetReports, TargetRunReport{
 				TargetID:     target.ID,
 				ConnectorID:  target.ConnectorID,
@@ -629,7 +634,8 @@ UPDATE radar_watch_targets SET etag = ?, cursor = ? WHERE id = ?`,
 			)
 		}
 
-		e.recordCollectionRun(ctx, inst.ID, target.ID, collectResult.Status, len(collectResult.Records), collectResult.ErrorMessage, tgtStart.Format(time.RFC3339Nano), tgtFinish.Format(time.RFC3339Nano))
+		e.recordCollectionRun(ctx, inst.ID, target.ID, collectResult.Status, len(collectResult.Records),
+			collectResult.ErrorMessage, tgtStart.Format(time.RFC3339Nano), tgtFinish.Format(time.RFC3339Nano))
 
 		summary.TargetReports = append(summary.TargetReports, TargetRunReport{
 			TargetID:        target.ID,
@@ -666,7 +672,8 @@ UPDATE radar_watch_targets SET etag = ?, cursor = ? WHERE id = ?`,
 	return summary, nil
 }
 
-func (e *Engine) ingestRecord(ctx context.Context, inst RadarInstance, target WatchTarget, rec CollectedRecord, observedTime time.Time) (string, string, error) {
+func (e *Engine) ingestRecord(ctx context.Context, inst RadarInstance, target WatchTarget, rec CollectedRecord,
+	observedTime time.Time) (string, string, error) {
 	ingestedTime := time.Now().UTC()
 	observedStr := observedTime.UTC().Format(time.RFC3339Nano)
 	ingestedStr := ingestedTime.Format(time.RFC3339Nano)
@@ -679,12 +686,14 @@ func (e *Engine) ingestRecord(ctx context.Context, inst RadarInstance, target Wa
 		return "", "", err
 	}
 
-	observationID, err := e.persistObservation(ctx, inst.ID, target, artifactID, rec, occurredStr, publishedStr, observedStr, ingestedStr, precision)
+	observationID, err := e.persistObservation(ctx, inst.ID, target, artifactID, rec, occurredStr, publishedStr,
+		observedStr, ingestedStr, precision)
 	if err != nil {
 		return "", "", err
 	}
 
-	eventID, err := e.clusterIntoEvent(ctx, inst, target, artifactID, observationID, rec, occurredStr, publishedStr, observedStr, ingestedStr, precision)
+	eventID, err := e.clusterIntoEvent(ctx, inst, target, artifactID, observationID, rec, occurredStr, publishedStr,
+		observedStr, ingestedStr, precision)
 	if err != nil {
 		return "", "", err
 	}
@@ -715,7 +724,8 @@ func (e *Engine) ingestRecord(ctx context.Context, inst RadarInstance, target Wa
 	return eventID, alertID, nil
 }
 
-func (e *Engine) persistArtifact(ctx context.Context, target WatchTarget, rec CollectedRecord, capturedAt string) (string, error) {
+func (e *Engine) persistArtifact(ctx context.Context, target WatchTarget, rec CollectedRecord,
+	capturedAt string) (string, error) {
 	contentHash := hashStrings(
 		normalizeClusterText(rec.Title),
 		normalizeClusterText(rec.Summary),
@@ -781,7 +791,8 @@ SELECT id FROM radar_raw_artifacts WHERE source_uri = ? AND content_hash = ?`,
 	return artifactID, nil
 }
 
-func (e *Engine) persistObservation(ctx context.Context, instanceID string, target WatchTarget, artifactID string, rec CollectedRecord, occurredAt, publishedAt, observedAt, ingestedAt, precision string) (string, error) {
+func (e *Engine) persistObservation(ctx context.Context, instanceID string, target WatchTarget, artifactID string,
+	rec CollectedRecord, occurredAt, publishedAt, observedAt, ingestedAt, precision string) (string, error) {
 	var existingID string
 	err := e.hub.DB().QueryRowContext(ctx, `
 SELECT id FROM radar_observations WHERE instance_id = ? AND target_id = ? AND artifact_id = ? LIMIT 1`,
@@ -795,7 +806,8 @@ SELECT id FROM radar_observations WHERE instance_id = ? AND target_id = ? AND ar
 	payload := firstNonEmpty(rec.PayloadJSON, "{}")
 	_, err = e.hub.DB().ExecContext(ctx, `
 INSERT INTO radar_observations
-  (id, instance_id, target_id, artifact_id, source_type, external_id, title, summary, occurred_at, published_at, observed_at, ingested_at, time_precision, payload_json)
+  (id, instance_id, target_id, artifact_id, source_type, external_id, title, summary, occurred_at, published_at,
+  	observed_at, ingested_at, time_precision, payload_json)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		obsID, instanceID, target.ID, artifactID, target.ConnectorID,
 		firstNonEmpty(rec.ExternalID, artifactID), rec.Title, rec.Summary,
@@ -807,7 +819,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	return obsID, nil
 }
 
-func (e *Engine) resolveEntityStrict(ctx context.Context, rec CollectedRecord, artifactID, createdAt string) (string, error) {
+func (e *Engine) resolveEntityStrict(ctx context.Context, rec CollectedRecord, artifactID, createdAt string) (string,
+	error) {
 	canonicalName := strings.TrimSpace(rec.EntityName)
 	normName := normalizeEntityName(canonicalName)
 	strongID := strings.TrimSpace(rec.StrongID)
@@ -863,7 +876,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?)`,
 	return entityID, nil
 }
 
-func (e *Engine) ensureEntityEventRelationship(ctx context.Context, entityID, eventID, artifactID, createdAt string) error {
+func (e *Engine) ensureEntityEventRelationship(ctx context.Context, entityID, eventID, artifactID,
+	createdAt string) error {
 	var existingID string
 	err := e.hub.DB().QueryRowContext(ctx, `
 SELECT id FROM radar_relationships
@@ -875,14 +889,17 @@ LIMIT 1`, entityID, eventID, artifactID,
 	}
 	relID := makeID("rel", entityID, eventID, artifactID)
 	_, err = e.hub.DB().ExecContext(ctx, `
-INSERT INTO radar_relationships (id, subject_entity_id, predicate, object_entity_id, confidence, evidence_artifact_id, created_at)
+INSERT INTO radar_relationships (id, subject_entity_id, predicate, object_entity_id, confidence, evidence_artifact_id,
+	created_at)
 VALUES (?, ?, 'involved_in', ?, 0.85, ?, ?)`,
 		relID, entityID, eventID, artifactID, createdAt,
 	)
 	return err
 }
 
-func (e *Engine) clusterIntoEvent(ctx context.Context, inst RadarInstance, target WatchTarget, artifactID, observationID string, rec CollectedRecord, occurredAt, publishedAt, observedAt, ingestedAt, precision string) (string, error) {
+func (e *Engine) clusterIntoEvent(ctx context.Context, inst RadarInstance, target WatchTarget, artifactID,
+	observationID string, rec CollectedRecord, occurredAt, publishedAt, observedAt, ingestedAt, precision string) (string,
+	error) {
 	clusterKey := hashStrings(normalizeClusterText(rec.Title), normalizeClusterText(rec.Summary))
 	domains := mergeDomains(rec.Domains, inst.Domains)
 	if len(domains) == 0 {
@@ -900,7 +917,8 @@ SELECT id, domains_json, occurred_at FROM radar_events WHERE cluster_key = ?`, c
 		domainsJSON, _ := json.Marshal(domains)
 		_, insErr := e.hub.DB().ExecContext(ctx, `
 INSERT INTO radar_events
-  (id, cluster_key, title, summary, primary_domain, domains_json, occurred_at, published_at, observed_at, ingested_at, time_precision, status, created_at, updated_at)
+  (id, cluster_key, title, summary, primary_domain, domains_json, occurred_at, published_at, observed_at, ingested_at,
+  	time_precision, status, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
 			eventID, clusterKey, rec.Title, rec.Summary, primaryDomain, string(domainsJSON),
 			occurredAt, publishedAt, observedAt, ingestedAt, precision, ingestedAt, ingestedAt,
@@ -929,7 +947,8 @@ WHERE id = ?`,
 	}
 
 	role := "supporting"
-	if target.ConnectorID == "github" || strings.EqualFold(target.TargetType, "primary_official") || strings.EqualFold(target.TargetType, "official") {
+	if target.ConnectorID == "github" || strings.EqualFold(target.TargetType,
+		"primary_official") || strings.EqualFold(target.TargetType, "official") {
 		role = "primary"
 	}
 	_, linkErr := e.hub.DB().ExecContext(ctx, `
@@ -968,7 +987,8 @@ VALUES (?, ?, ?, ?, ?, 'active', 'ready', ?)`,
 	return nil
 }
 
-func (e *Engine) assessEvent(ctx context.Context, inst RadarInstance, eventID string, rec CollectedRecord, assessedAt string) (RadarAssessment, error) {
+func (e *Engine) assessEvent(ctx context.Context, inst RadarInstance, eventID string, rec CollectedRecord,
+	assessedAt string) (RadarAssessment, error) {
 	var independentSources int
 	if err := e.hub.DB().QueryRowContext(ctx, `
 SELECT COUNT(DISTINCT independence_group) FROM radar_event_evidence WHERE event_id = ?`, eventID,
@@ -999,7 +1019,8 @@ WHERE ev.event_id = ? AND (obs.source_type = 'github' OR LOWER(tgt.target_type) 
 		confidenceLabel = "single_source"
 	}
 
-	impact, urgency, relevance, velocity, novelty, actionability, exposure := scorePriorityAxes(rec, evidenceCount, independentSources)
+	impact, urgency, relevance, velocity, novelty, actionability, exposure := scorePriorityAxes(rec, evidenceCount,
+		independentSources)
 	priorityScore := math.Round((0.22*impact+0.18*urgency+0.16*relevance+0.14*velocity+0.12*novelty+0.10*actionability+0.08*exposure)*100) / 100
 	priorityTier := classifyPriorityTier(priorityScore)
 
@@ -1036,7 +1057,8 @@ WHERE ev.event_id = ? AND (obs.source_type = 'github' OR LOWER(tgt.target_type) 
 
 	_, err := e.hub.DB().ExecContext(ctx, `
 INSERT INTO radar_assessments
-  (id, event_id, impact, urgency, relevance, velocity, novelty, actionability, exposure, priority_score, priority_tier, confidence_label, independent_sources, uncertainty_flags_json, rationale, assessed_at)
+  (id, event_id, impact, urgency, relevance, velocity, novelty, actionability, exposure, priority_score, priority_tier,
+  	confidence_label, independent_sources, uncertainty_flags_json, rationale, assessed_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		assessment.ID, assessment.EventID, assessment.Impact, assessment.Urgency, assessment.Relevance,
 		assessment.Velocity, assessment.Novelty, assessment.Actionability, assessment.Exposure,
@@ -1049,7 +1071,8 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	return assessment, nil
 }
 
-func (e *Engine) routeAlert(ctx context.Context, instanceID, eventID string, assessment RadarAssessment, now string) (string, error) {
+func (e *Engine) routeAlert(ctx context.Context, instanceID, eventID string, assessment RadarAssessment,
+	now string) (string, error) {
 	alertKind := ""
 	if assessment.PriorityScore >= 70 {
 		if assessment.ConfidenceLabel == "single_source" || assessment.ConfidenceLabel == "unverified" {
@@ -1069,7 +1092,8 @@ func (e *Engine) routeAlert(ctx context.Context, instanceID, eventID string, ass
 	alertID := makeID("alt", dedupeKey)
 
 	_, err := e.hub.DB().ExecContext(ctx, `
-INSERT INTO radar_alerts (id, instance_id, event_id, assessment_id, dedupe_key, priority_tier, confidence_label, alert_kind, title, status, created_at, updated_at)
+INSERT INTO radar_alerts (id, instance_id, event_id, assessment_id, dedupe_key, priority_tier, confidence_label,
+	alert_kind, title, status, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
 ON CONFLICT(dedupe_key) DO UPDATE SET
   assessment_id = excluded.assessment_id,
@@ -1110,7 +1134,8 @@ func (e *Engine) ListSignals(ctx context.Context, instanceID string, limit int) 
 	signals := make([]RadarSignal, 0)
 	for rows.Next() {
 		var sig RadarSignal
-		if scanErr := rows.Scan(&sig.ID, &sig.InstanceID, &sig.LensID, &sig.Title, &sig.Summary, &sig.State, &sig.BaselineStatus, &sig.DetectedAt); scanErr != nil {
+		if scanErr := rows.Scan(&sig.ID, &sig.InstanceID, &sig.LensID, &sig.Title, &sig.Summary, &sig.State,
+			&sig.BaselineStatus, &sig.DetectedAt); scanErr != nil {
 			return nil, scanErr
 		}
 		signals = append(signals, sig)
@@ -1283,7 +1308,8 @@ ORDER BY created_at DESC`, cleanID, cleanID)
 	rels := make([]RadarRelationship, 0)
 	for rows.Next() {
 		var rel RadarRelationship
-		if scanErr := rows.Scan(&rel.ID, &rel.SubjectEntityID, &rel.Predicate, &rel.ObjectEntityID, &rel.Confidence, &rel.EvidenceArtifactID, &rel.CreatedAt); scanErr != nil {
+		if scanErr := rows.Scan(&rel.ID, &rel.SubjectEntityID, &rel.Predicate, &rel.ObjectEntityID, &rel.Confidence,
+			&rel.EvidenceArtifactID, &rel.CreatedAt); scanErr != nil {
 			return nil, scanErr
 		}
 		rels = append(rels, rel)
@@ -1312,7 +1338,8 @@ func (e *Engine) ListAlerts(ctx context.Context, status string, limit int) ([]Ra
 	alerts := make([]RadarAlert, 0)
 	for rows.Next() {
 		var alt RadarAlert
-		if scanErr := rows.Scan(&alt.ID, &alt.InstanceID, &alt.EventID, &alt.AssessmentID, &alt.DedupeKey, &alt.PriorityTier, &alt.ConfidenceLabel, &alt.AlertKind, &alt.Title, &alt.Status, &alt.CreatedAt, &alt.UpdatedAt); scanErr != nil {
+		if scanErr := rows.Scan(&alt.ID, &alt.InstanceID, &alt.EventID, &alt.AssessmentID, &alt.DedupeKey, &alt.PriorityTier,
+			&alt.ConfidenceLabel, &alt.AlertKind, &alt.Title, &alt.Status, &alt.CreatedAt, &alt.UpdatedAt); scanErr != nil {
 			return nil, scanErr
 		}
 		alerts = append(alerts, alt)
@@ -1339,7 +1366,8 @@ UPDATE radar_alerts SET status = 'acknowledged', updated_at = ? WHERE id = ?`, n
 	row := e.hub.DB().QueryRowContext(ctx, `
 SELECT id, instance_id, event_id, assessment_id, dedupe_key, priority_tier, confidence_label, alert_kind, title, status, created_at, updated_at
 FROM radar_alerts WHERE id = ?`, cleanID)
-	if scanErr := row.Scan(&alt.ID, &alt.InstanceID, &alt.EventID, &alt.AssessmentID, &alt.DedupeKey, &alt.PriorityTier, &alt.ConfidenceLabel, &alt.AlertKind, &alt.Title, &alt.Status, &alt.CreatedAt, &alt.UpdatedAt); scanErr != nil {
+	if scanErr := row.Scan(&alt.ID, &alt.InstanceID, &alt.EventID, &alt.AssessmentID, &alt.DedupeKey, &alt.PriorityTier,
+		&alt.ConfidenceLabel, &alt.AlertKind, &alt.Title, &alt.Status, &alt.CreatedAt, &alt.UpdatedAt); scanErr != nil {
 		return RadarAlert{}, scanErr
 	}
 	return alt, nil
@@ -1415,7 +1443,8 @@ LIMIT 30`, inst.ID)
 	var evidenceRefs []string
 	for rows.Next() {
 		var row groundedRow
-		if scanErr := rows.Scan(&row.eventID, &row.title, &row.summary, &row.occurredAt, &row.artifactID, &row.sourceURI, &row.indGroup, &row.confidence, &row.priority); scanErr != nil {
+		if scanErr := rows.Scan(&row.eventID, &row.title, &row.summary, &row.occurredAt, &row.artifactID, &row.sourceURI,
+			&row.indGroup, &row.confidence, &row.priority); scanErr != nil {
 			return RadarReport{}, scanErr
 		}
 		evidenceRows = append(evidenceRows, row)
@@ -1443,7 +1472,8 @@ LIMIT 30`, inst.ID)
 	}
 
 	if e.gatewayURL != "" && len(evidenceRows) > 0 {
-		gatewayReport, usedGateway, gwErr := e.tryGatewayReport(ctx, inst, resolvedTitle, resolvedScope, evidenceRows, evidenceRefs)
+		gatewayReport, usedGateway, gwErr := e.tryGatewayReport(ctx, inst, resolvedTitle, resolvedScope, evidenceRows,
+			evidenceRefs)
 		if gwErr != nil {
 			return RadarReport{}, gwErr
 		}
@@ -1477,10 +1507,13 @@ LIMIT 30`, inst.ID)
 			})
 		}
 		if row.confidence == "single_source" || row.confidence == "unverified" {
-			report.ReportedClaims = append(report.ReportedClaims, fmt.Sprintf("Unconfirmed single-group claim (%s): %s", row.confidence, row.title))
-			report.Unknowns = append(report.Unknowns, fmt.Sprintf("Independent corroboration missing for event %s (%s)", row.eventID, row.title))
+			report.ReportedClaims = append(report.ReportedClaims, fmt.Sprintf("Unconfirmed single-group claim (%s): %s",
+				row.confidence, row.title))
+			report.Unknowns = append(report.Unknowns, fmt.Sprintf("Independent corroboration missing for event %s (%s)",
+				row.eventID, row.title))
 		} else {
-			report.Inferences = append(report.Inferences, fmt.Sprintf("Corroborated (%s, priority=%.1f): %s", row.confidence, row.priority, row.title))
+			report.Inferences = append(report.Inferences, fmt.Sprintf("Corroborated (%s, priority=%.1f): %s", row.confidence,
+				row.priority, row.title))
 		}
 	}
 
@@ -1521,7 +1554,8 @@ func (e *Engine) ValidateReport(ctx context.Context, report RadarReport) error {
 				return fmt.Errorf("%w: observedFacts[%d] contains empty evidenceRef", ErrValidation, idx)
 			}
 			if !refIndex[cleanRef] {
-				return fmt.Errorf("%w: observedFacts[%d] references %q absent from report evidenceRefs", ErrValidation, idx, cleanRef)
+				return fmt.Errorf("%w: observedFacts[%d] references %q absent from report evidenceRefs", ErrValidation, idx,
+					cleanRef)
 			}
 			var count int
 			if err := e.hub.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM radar_raw_artifacts WHERE id = ?`, cleanRef).Scan(&count); err != nil {
@@ -1535,7 +1569,8 @@ func (e *Engine) ValidateReport(ctx context.Context, report RadarReport) error {
 	return nil
 }
 
-func (e *Engine) tryGatewayReport(ctx context.Context, inst RadarInstance, title, scope string, evidenceRows interface{}, evidenceRefs []string) (RadarReport, bool, error) {
+func (e *Engine) tryGatewayReport(ctx context.Context, inst RadarInstance, title, scope string,
+	evidenceRows interface{}, evidenceRefs []string) (RadarReport, bool, error) {
 	evidenceJSON, _ := json.Marshal(evidenceRows)
 	reqBody, _ := json.Marshal(map[string]any{
 		"model": "default",
@@ -1545,8 +1580,9 @@ func (e *Engine) tryGatewayReport(ctx context.Context, inst RadarInstance, title
 				"content": "Compile a JSON report with keys observedFacts ([{statement,evidenceRefs}]), reportedClaims ([]string), inferences ([]string), unknowns ([]string), evidenceRefs ([]string). Every observedFact must cite valid artifact IDs.",
 			},
 			{
-				"role":    "user",
-				"content": fmt.Sprintf("Instance=%s Title=%s Scope=%s ValidEvidenceIDs=%v Evidence=%s", inst.ID, title, scope, evidenceRefs, string(evidenceJSON)),
+				"role": "user",
+				"content": fmt.Sprintf("Instance=%s Title=%s Scope=%s ValidEvidenceIDs=%v Evidence=%s", inst.ID, title, scope,
+					evidenceRefs, string(evidenceJSON)),
 			},
 		},
 	})
@@ -1603,7 +1639,8 @@ func (e *Engine) persistReport(ctx context.Context, report RadarReport) error {
 
 	_, err := e.hub.DB().ExecContext(ctx, `
 INSERT INTO radar_reports
-  (id, instance_id, title, scope, observed_facts_json, reported_claims_json, inferences_json, unknowns_json, evidence_refs_json, model, created_at)
+  (id, instance_id, title, scope, observed_facts_json, reported_claims_json, inferences_json, unknowns_json,
+  	evidence_refs_json, model, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		report.ID, report.InstanceID, report.Title, report.Scope,
 		string(factsJSON), string(claimsJSON), string(infJSON), string(unkJSON), string(refsJSON),
@@ -1629,7 +1666,8 @@ FROM radar_connector_health ORDER BY connector_id ASC`)
 	healthList := make([]ConnectorHealth, 0)
 	for rows.Next() {
 		var h ConnectorHealth
-		if scanErr := rows.Scan(&h.ConnectorID, &h.LastAttemptAt, &h.LastSuccessAt, &h.LastStatus, &h.LastError, &h.TotalRuns, &h.FailedRuns, &h.RateLimitedUntil); scanErr != nil {
+		if scanErr := rows.Scan(&h.ConnectorID, &h.LastAttemptAt, &h.LastSuccessAt, &h.LastStatus, &h.LastError, &h.TotalRuns,
+			&h.FailedRuns, &h.RateLimitedUntil); scanErr != nil {
 			return nil, scanErr
 		}
 		healthList = append(healthList, h)
@@ -1684,7 +1722,8 @@ SELECT rate_limited_until FROM radar_connector_health WHERE connector_id = ?`, c
 	return "", false
 }
 
-func (e *Engine) updateConnectorHealth(ctx context.Context, connectorID string, collectResult CollectResult, now time.Time) {
+func (e *Engine) updateConnectorHealth(ctx context.Context, connectorID string, collectResult CollectResult,
+	now time.Time) {
 	nowStr := now.UTC().Format(time.RFC3339Nano)
 	successAt := ""
 	failedDelta := 0
@@ -1720,10 +1759,12 @@ ON CONFLICT(connector_id) DO UPDATE SET
 	)
 }
 
-func (e *Engine) recordCollectionRun(ctx context.Context, instanceID, targetID, status string, recordsAcquired int, errMsg, startedAt, finishedAt string) {
+func (e *Engine) recordCollectionRun(ctx context.Context, instanceID, targetID, status string, recordsAcquired int,
+	errMsg, startedAt, finishedAt string) {
 	runID := makeID("run", instanceID, targetID, startedAt)
 	_, _ = e.hub.DB().ExecContext(ctx, `
-INSERT INTO radar_collection_runs (id, instance_id, target_id, status, records_acquired, error_message, started_at, finished_at)
+INSERT INTO radar_collection_runs (id, instance_id, target_id, status, records_acquired, error_message, started_at,
+	finished_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		runID, instanceID, targetID, status, recordsAcquired, errMsg, startedAt, finishedAt,
 	)
@@ -1908,7 +1949,8 @@ func inferLensForRecord(packLenses []string, rec CollectedRecord) string {
 	return "L02"
 }
 
-func scorePriorityAxes(rec CollectedRecord, evidenceCount, independentSources int) (impact, urgency, relevance, velocity, novelty, actionability, exposure float64) {
+func scorePriorityAxes(rec CollectedRecord, evidenceCount, independentSources int) (impact, urgency, relevance,
+	velocity, novelty, actionability, exposure float64) {
 	text := strings.ToLower(rec.Title + " " + rec.Summary)
 	impact = 50
 	urgency = 45
@@ -1921,7 +1963,8 @@ func scorePriorityAxes(rec CollectedRecord, evidenceCount, independentSources in
 	actionability = 55
 	exposure = 50
 
-	if containsAny(text, "critical", "outage", "breach", "zero-day", "emergency", "cve", "sanction", "disruption", "shutdown") {
+	if containsAny(text, "critical", "outage", "breach", "zero-day", "emergency", "cve", "sanction", "disruption",
+		"shutdown") {
 		impact = 85
 		urgency = 85
 		actionability = 80
