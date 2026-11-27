@@ -1,17 +1,27 @@
-name: Go CI
+name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
-    name: Go Test
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -20,19 +30,24 @@ jobs:
           check-latest: true
           cache: true
 
-      - name: Validate commit messages
+      - name: Check conventional commit messages
         if: github.event_name == 'pull_request'
         run: |
-          git log --oneline -10 --pretty=format:"%s" | while read msg; do
-            if ! echo "$msg" | grep -qE '^(feat|fix|docs|chore|refactor|test|perf|build|ci|revert)(\(.+\))?: .+'; then
-              echo "Invalid commit message format: $msg"
-              echo "Use: type(scope): description"
-              exit 1
-            fi
+          git log --format=%s origin/main..HEAD | while IFS= read -r msg; do
+            echo "$msg" | grep -qE '^(feat|fix|docs|chore|refactor|test|perf|build|ci|revert|security|deps|style|release)(\(.+\))?!?: .+' || { echo "Invalid: $msg"; exit 1; }
           done
 
-      - name: Go vet
+      - name: gofmt
+        run: test -z "$(gofmt -l .)"
+
+      - name: go vet
         run: go vet ./...
 
-      - name: Go test
-        run: go test -count=1 ./...
+      - name: go test
+        run: go test -count=1 -race ./...
+
+      - name: Coverage threshold
+        run: |
+          go test -coverprofile=coverage.out ./... >/dev/null
+          total=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+          awk -v v="$total" 'BEGIN{exit !(v>=70)}' || { echo "Coverage $total% < 70%"; exit 1; }
