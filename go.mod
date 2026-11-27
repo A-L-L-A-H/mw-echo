@@ -3,6 +3,7 @@ module github.com/A-L-L-A-H/mw-echo
 go 1.27
 
 require (
+	github.com/A-L-L-A-H/mw-gdrive v0.0.0
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	go.mau.fi/whatsmeow v0.0.0-20261125185702-10b99a98616e
@@ -44,3 +45,5 @@ require (
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
 )
+
+replace github.com/A-L-L-A-H/mw-gdrive => ../mw-gdrive

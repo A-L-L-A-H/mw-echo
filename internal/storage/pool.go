@@ -646,7 +646,7 @@ func (p *PoolManager) OpenDownload(ctx context.Context, id string) (PooledObject
 		if err != nil {
 			return PooledObject{}, nil, err
 		}
-		stream, err = client.Download(ctx, remoteID)
+		stream, _, err = client.Download(ctx, remoteID)
 		if err != nil {
 			return PooledObject{}, nil, err
 		}
