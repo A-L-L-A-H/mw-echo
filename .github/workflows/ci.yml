@@ -1,0 +1,38 @@
+name: Go CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Go Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: true
+
+      - name: Validate commit messages
+        if: github.event_name == 'pull_request'
+        run: |
+          git log --oneline -10 --pretty=format:"%s" | while read msg; do
+            if ! echo "$msg" | grep -qE '^(feat|fix|docs|chore|refactor|test|perf|build|ci|revert)(\(.+\))?: .+'; then
+              echo "Invalid commit message format: $msg"
+              echo "Use: type(scope): description"
+              exit 1
+            fi
+          done
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Go test
+        run: go test -count=1 ./...
