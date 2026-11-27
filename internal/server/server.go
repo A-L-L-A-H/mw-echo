@@ -542,7 +542,7 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 			}
 			echoURL = scheme + "://" + host
 		}
-		ridURL := firstNonEmpty(cfg.RIDURL, os.Getenv("MW_RID_URL"), "http://127.0.0.1:4320")
+		ridURL := firstNonEmpty(cfg.RIDURL, os.Getenv("MW_RID_URL"), "http://mw-rid:4480")
 		myloveURL := firstNonEmpty(cfg.MyLoveURL, os.Getenv("MW_MYLOVE_URL"), "http://127.0.0.1:4330")
 
 		pairQuery := url.Values{}
