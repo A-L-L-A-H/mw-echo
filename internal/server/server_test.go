@@ -643,3 +643,117 @@ func TestWaveD2RoutesAndMCPTools(t *testing.T) {
 		t.Fatalf("MCP echo_desktop_doctor failed: %d %s", mcpDocRec.Code, mcpDocRec.Body.String())
 	}
 }
+
+func TestV1HandlersAndWorldRadarWhatsAppMCP(t *testing.T) {
+	_, handler := setupTestEcho(t, "")
+
+	// 1. WorldRadar /api/v1/* endpoints (health, instances create/list, events query)
+	wrHealthRec := httptest.NewRecorder()
+	handler.ServeHTTP(wrHealthRec, httptest.NewRequest(http.MethodGet, "/api/v1/health", nil))
+	if wrHealthRec.Code != http.StatusOK || !strings.Contains(wrHealthRec.Body.String(), `"database":true`) {
+		t.Fatalf("GET /api/v1/health failed: %d %s", wrHealthRec.Code, wrHealthRec.Body.String())
+	}
+
+	createInstReq := httptest.NewRequest(http.MethodPost, "/api/v1/instances", strings.NewReader(`{"name":"spec-radar","version":"1.0.0","taxonomy_version":"v1.0.0","config_json":"{}"}`))
+	createInstReq.Header.Set("Content-Type", "application/json")
+	createInstRec := httptest.NewRecorder()
+	handler.ServeHTTP(createInstRec, createInstReq)
+	if createInstRec.Code != http.StatusCreated || !strings.Contains(createInstRec.Body.String(), "spec-radar") {
+		t.Fatalf("POST /api/v1/instances failed: %d %s", createInstRec.Code, createInstRec.Body.String())
+	}
+
+	var createdInst struct {
+		InstanceID string `json:"instance_id"`
+	}
+	_ = json.Unmarshal(createInstRec.Body.Bytes(), &createdInst)
+	if createdInst.InstanceID == "" {
+		t.Fatalf("expected non-empty instance_id in %s", createInstRec.Body.String())
+	}
+
+	eventsV1Rec := httptest.NewRecorder()
+	handler.ServeHTTP(eventsV1Rec, httptest.NewRequest(http.MethodGet, "/api/v1/events?limit=10", nil))
+	if eventsV1Rec.Code != http.StatusOK || !strings.Contains(eventsV1Rec.Body.String(), `"events"`) {
+		t.Fatalf("GET /api/v1/events failed: %d %s", eventsV1Rec.Code, eventsV1Rec.Body.String())
+	}
+
+	// 2. WhatsApp GOWA /api/v1/* endpoints
+	for _, endpoint := range []string{
+		"/api/v1/system/health",
+		"/api/v1/system/metrics",
+		"/api/v1/inbox",
+		"/api/v1/assets/index.html",
+	} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, endpoint, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s expected 200, got %d: %s", endpoint, rec.Code, rec.Body.String())
+		}
+	}
+
+	// 3. Assistant & Gamification endpoints (/api/* and /api/v1/*)
+	for _, endpoint := range []string{
+		"/api/assistant/context",
+		"/api/assistant/contract",
+		"/api/game/stamps",
+		"/api/v1/assistant/contract",
+		"/api/v1/game/profile",
+		"/api/v1/game/stamps",
+	} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, endpoint, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s expected 200, got %d: %s", endpoint, rec.Code, rec.Body.String())
+		}
+	}
+
+	// 4. MCP tools/list exposes worldradar_* and echo_wa_* tools
+	mcpListReq := httptest.NewRequest(http.MethodPost, "/api/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":30,"method":"tools/list"}`))
+	mcpListReq.Header.Set("Content-Type", "application/json")
+	mcpListRec := httptest.NewRecorder()
+	handler.ServeHTTP(mcpListRec, mcpListReq)
+	if mcpListRec.Code != http.StatusOK {
+		t.Fatalf("MCP tools/list failed: %d %s", mcpListRec.Code, mcpListRec.Body.String())
+	}
+	for _, toolName := range []string{
+		"echo_wa_devices",
+		"echo_wa_send_message",
+		"echo_wa_list_chats",
+		"echo_wa_get_messages",
+		"worldradar_query_events",
+		"worldradar_get_event",
+		"worldradar_list_sources",
+		"worldradar_register_source",
+		"worldradar_trigger_ingest",
+		"worldradar_get_freshness",
+		"worldradar_get_taxonomy",
+	} {
+		if !strings.Contains(mcpListRec.Body.String(), toolName) {
+			t.Fatalf("MCP tools/list missing %s", toolName)
+		}
+	}
+
+	// 5. MCP tools/call executes worldradar_get_taxonomy, worldradar_query_events, and echo_wa_devices
+	taxReq := httptest.NewRequest(http.MethodPost, "/api/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":31,"method":"tools/call","params":{"name":"worldradar_get_taxonomy","arguments":{"version":"v1.0.0"}}}`))
+	taxReq.Header.Set("Content-Type", "application/json")
+	taxRec := httptest.NewRecorder()
+	handler.ServeHTTP(taxRec, taxReq)
+	if taxRec.Code != http.StatusOK || strings.Contains(taxRec.Body.String(), `"error"`) || !strings.Contains(taxRec.Body.String(), "D01") {
+		t.Fatalf("MCP worldradar_get_taxonomy failed: %d %s", taxRec.Code, taxRec.Body.String())
+	}
+
+	wrQueryReq := httptest.NewRequest(http.MethodPost, "/api/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":32,"method":"tools/call","params":{"name":"worldradar_query_events","arguments":{"instance_id":"`+createdInst.InstanceID+`","limit":5}}}`))
+	wrQueryReq.Header.Set("Content-Type", "application/json")
+	wrQueryRec := httptest.NewRecorder()
+	handler.ServeHTTP(wrQueryRec, wrQueryReq)
+	if wrQueryRec.Code != http.StatusOK || strings.Contains(wrQueryRec.Body.String(), `"error"`) {
+		t.Fatalf("MCP worldradar_query_events failed: %d %s", wrQueryRec.Code, wrQueryRec.Body.String())
+	}
+
+	waDevReq := httptest.NewRequest(http.MethodPost, "/api/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":33,"method":"tools/call","params":{"name":"echo_wa_devices","arguments":{}}}`))
+	waDevReq.Header.Set("Content-Type", "application/json")
+	waDevRec := httptest.NewRecorder()
+	handler.ServeHTTP(waDevRec, waDevReq)
+	if waDevRec.Code != http.StatusOK || strings.Contains(waDevRec.Body.String(), `"error"`) {
+		t.Fatalf("MCP echo_wa_devices failed: %d %s", waDevRec.Code, waDevRec.Body.String())
+	}
+}
