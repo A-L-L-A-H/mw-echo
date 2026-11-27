@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -23,8 +24,34 @@ type Persona struct {
 	Name         string `json:"name"`
 	Role         string `json:"role"`
 	Accent       string `json:"accent"`
+	ColorName    string `json:"colorName"`
 	AgentProfile string `json:"agentProfile"`
 	SystemPrompt string `json:"systemPrompt"`
+}
+
+// LiveContext holds the structured live telemetry injected into every operator system prompt.
+type LiveContext struct {
+	Rank               string  `json:"rank"`
+	Level              int     `json:"level"`
+	XP                 int64   `json:"xp"`
+	NextLevelXP        int64   `json:"nextLevelXp"`
+	ComboMult          float64 `json:"comboMult"`
+	BossHealthPct      float64 `json:"bossHealthPct"`
+	ActiveBossName     string  `json:"activeBossName,omitempty"`
+	P0TasksPending     int     `json:"p0TasksPending"`
+	DocsCount          int     `json:"docsCount"`
+	RouterTokensSaved  int64   `json:"routerTokensSaved"`
+	RouterCostSavedUSD float64 `json:"routerCostSavedUsd"`
+	Header             string  `json:"header"`
+}
+
+// UIContract describes the comic speech-bubble drawer and daily mission brief widget contract.
+type UIContract struct {
+	Shortcut                string      `json:"shortcut"`
+	DrawerStyle             string      `json:"drawerStyle"`
+	DailyMissionBriefWidget bool        `json:"dailyMissionBriefWidget"`
+	Personas                []Persona   `json:"personas"`
+	LiveContext             LiveContext `json:"liveContext"`
 }
 
 // ChatMessage stores an assistant conversation turn in SQLite.
@@ -38,12 +65,14 @@ type ChatMessage struct {
 	CreatedAt   string `json:"createdAt"`
 }
 
-// Hooks connects Shadow Sidekick to live gamification, WhatsApp GOWA, Coding Agent, and catalog sniffing.
+// Hooks connects Shadow Sidekick to live gamification, WhatsApp GOWA, Coding Agent, and 9Router savings.
 type Hooks struct {
 	SendWhatsApp       func(ctx context.Context, deviceID, phone, message string) (string, error)
 	LaunchCoderMission func(ctx context.Context, workDir, prompt string) (string, error)
 	GetGameSummary     func(ctx context.Context) string
 	AwardXP            func(ctx context.Context, eventType, label string, baseXP int, refID string)
+	GetLiveContext     func(ctx context.Context) LiveContext
+	GetRouterSavings   func(ctx context.Context) (tokensSaved int64, costSavedUSD float64)
 }
 
 // Options configures the Assistant service.
@@ -65,34 +94,38 @@ var defaultPersonas = []Persona{
 	{
 		ID:           "tactician",
 		Name:         "TACTICIAN",
-		Role:         "Principal Architect & Boss Strategist",
-		Accent:       "#ffe031",
+		Role:         "Strategic Route Mapping & High-Level Planning",
+		Accent:       "#3b82f6",
+		ColorName:    "Blue",
 		AgentProfile: "claude-code",
-		SystemPrompt: "You are TACTICIAN inside the mw-echo RIOT command hub. Be sharp, concise, architectural. Prioritize P0 blockers, milestone bosses, and zero-waste engineering.",
+		SystemPrompt: "You are TACTICIAN inside the mw-echo RIOT command hub. Specialize in strategic route mapping, high-level planning, and resource allocation. Prioritize P0 blockers, milestone bosses, and zero-waste execution.",
 	},
 	{
 		ID:           "hacker",
 		Name:         "HACKER",
-		Role:         "Chaotic Code Ronin & Debugger",
-		Accent:       "#00f0ff",
+		Role:         "Low-Level Code Execution & Vulnerability Scanning",
+		Accent:       "#10b981",
+		ColorName:    "Emerald",
 		AgentProfile: "opencode",
-		SystemPrompt: "You are HACKER inside mw-echo. Think in patches, root causes, and shell commands. Recommend launching a Coding Agent mission when workspace edits are needed.",
+		SystemPrompt: "You are HACKER inside mw-echo. Specialize in low-level code execution, vulnerability scanning, and rapid script patching. Think in patches, root causes, and shell commands; launch Coding Agent missions when workspace edits are needed.",
 	},
 	{
 		ID:           "oracle",
 		Name:         "ORACLE",
-		Role:         "Codex & Observatory Signal Analyst",
-		Accent:       "#ff2e88",
+		Role:         "Architectural Insights & Deep Diagnostics",
+		Accent:       "#8b5cf6",
+		ColorName:    "Purple",
 		AgentProfile: "gemini-cli",
-		SystemPrompt: "You are ORACLE inside mw-echo. Synthesize Codex FTS5 docs, OTLP telemetry, FreeLLMAPI loot, and repo radar discoveries clearly.",
+		SystemPrompt: "You are ORACLE inside mw-echo. Specialize in architectural insights, log analysis, and deep diagnostics across Codex FTS5 docs, OTLP telemetry, 9Router savings, and repo radar signals.",
 	},
 	{
 		ID:           "dispatcher",
 		Name:         "DISPATCHER",
-		Role:         "Ops, Tasks & WhatsApp GOWA Chief",
-		Accent:       "#a3ff12",
+		Role:         "Task Orchestration & Event Streaming Coordination",
+		Accent:       "#f59e0b",
+		ColorName:    "Amber",
 		AgentProfile: "default",
-		SystemPrompt: "You are DISPATCHER inside mw-echo. Keep tasks moving on Kanban, draft crisp WhatsApp GOWA comms, and guard daily quest streaks.",
+		SystemPrompt: "You are DISPATCHER inside mw-echo. Specialize in task orchestration, event streaming, and dispatcher coordination across Kanban bounties, WhatsApp GOWA comms, and daily quest streaks.",
 	},
 }
 
@@ -134,6 +167,7 @@ CREATE INDEX IF NOT EXISTS idx_assistant_created ON assistant_messages(created_a
 	return err
 }
 
+// Personas returns all configured operator personas.
 func (s *Service) Personas() []Persona {
 	out := make([]Persona, len(defaultPersonas))
 	copy(out, defaultPersonas)
@@ -208,12 +242,172 @@ func (s *Service) ClearHistory(ctx context.Context) error {
 	return err
 }
 
+func computeRankProgress(totalXP int64) (level int, rankGrade string, nextXP int64) {
+	if totalXP < 0 {
+		totalXP = 0
+	}
+	level = 1
+	var floorXP int64
+	for {
+		span := int64(math.Floor(120 * math.Pow(float64(level), 1.45)))
+		if totalXP < floorXP+span {
+			nextXP = floorXP + span
+			break
+		}
+		floorXP += span
+		level++
+	}
+	switch {
+	case level >= 50:
+		rankGrade = "SS"
+	case level >= 30:
+		rankGrade = "S"
+	case level >= 20:
+		rankGrade = "A"
+	case level >= 10:
+		rankGrade = "B"
+	case level >= 5:
+		rankGrade = "C"
+	default:
+		rankGrade = "D"
+	}
+	return level, rankGrade, nextXP
+}
+
+func comboMultFromCount(count int) float64 {
+	switch {
+	case count >= 4:
+		return 8.0
+	case count == 3:
+		return 4.0
+	case count == 2:
+		return 2.0
+	default:
+		return 1.0
+	}
+}
+
+// FormatLiveContextHeader formats the canonical prompt header: [RANK: S | XP: 4820/5000 | COMBO: x4 | BOSS: 82% HP].
+func FormatLiveContextHeader(lc LiveContext) string {
+	rank := strings.TrimSpace(lc.Rank)
+	if rank == "" {
+		rank = "D"
+	}
+	combo := lc.ComboMult
+	if combo < 1 {
+		combo = 1
+	}
+	bossPct := math.Max(0, math.Min(100, math.Round(lc.BossHealthPct)))
+	return fmt.Sprintf("[RANK: %s | XP: %d/%d | COMBO: x%g | BOSS: %.0f%% HP]",
+		rank, lc.XP, lc.NextLevelXP, combo, bossPct)
+}
+
+// BuildLiveContext aggregates Rank/XP/Combo/Boss milestones, P0 tasks, docs count, and 9Router savings.
+func (s *Service) BuildLiveContext(ctx context.Context) LiveContext {
+	if s.hooks.GetLiveContext != nil {
+		lc := s.hooks.GetLiveContext(ctx)
+		if lc.Header == "" {
+			lc.Header = FormatLiveContextHeader(lc)
+		}
+		return lc
+	}
+
+	lc := LiveContext{
+		Rank:        "D",
+		Level:       1,
+		NextLevelXP: 120,
+		ComboMult:   1,
+	}
+
+	// Read gamification profile if the table is initialized in SQLite.
+	var totalXP int64
+	var comboCount int
+	var lastActionRaw string
+	if err := s.hub.DB().QueryRowContext(ctx, `
+SELECT total_xp, combo_count, last_action_at FROM game_profile WHERE id = 'operator'`).
+		Scan(&totalXP, &comboCount, &lastActionRaw); err == nil {
+		level, grade, nextXP := computeRankProgress(totalXP)
+		lc.Level = level
+		lc.Rank = grade
+		lc.XP = totalXP
+		lc.NextLevelXP = nextXP
+		if lastActionRaw != "" {
+			if prev, parseErr := time.Parse(time.RFC3339Nano, lastActionRaw); parseErr == nil && time.Since(prev) <= 30*time.Minute {
+				lc.ComboMult = comboMultFromCount(comboCount)
+			}
+		}
+	}
+
+	// Compute live Boss Milestone HP % and P0 tasks + docs counters.
+	stats, _ := s.hub.Stats(ctx)
+	lc.DocsCount = stats.DocsCount
+
+	p0Tasks, _ := s.hub.ListTasks(ctx, "", "", "p0", "", 500)
+	for _, t := range p0Tasks {
+		if !strings.EqualFold(t.Status, "done") {
+			lc.P0TasksPending++
+		}
+	}
+
+	projects, _ := s.hub.ListProjects(ctx)
+	var totalMaxHP, totalCurHP int
+	for _, proj := range projects {
+		for _, ms := range proj.Milestones {
+			if ms.TotalTasks == 0 {
+				continue
+			}
+			maxHP := ms.TotalTasks * 100
+			curHP := (ms.TotalTasks - ms.DoneTasks) * 100
+			if curHP < 0 {
+				curHP = 0
+			}
+			totalMaxHP += maxHP
+			totalCurHP += curHP
+			if curHP > 0 && lc.ActiveBossName == "" {
+				lc.ActiveBossName = proj.Slug + "::" + ms.Name
+			}
+		}
+	}
+	if totalMaxHP > 0 {
+		lc.BossHealthPct = math.Round((float64(totalCurHP)/float64(totalMaxHP))*1000) / 10
+	}
+
+	// Read 9Router RTK + cache savings via hook or directly from AI Gateway tables if present.
+	if s.hooks.GetRouterSavings != nil {
+		lc.RouterTokensSaved, lc.RouterCostSavedUSD = s.hooks.GetRouterSavings(ctx)
+	} else {
+		var rtkSaved, cacheSaved int64
+		_ = s.hub.DB().QueryRowContext(ctx, `SELECT COALESCE(SUM(rtk_tokens_saved), 0) FROM ai_request_logs`).Scan(&rtkSaved)
+		_ = s.hub.DB().QueryRowContext(ctx, `SELECT COALESCE(SUM(tokens_saved), 0) FROM ai_response_cache`).Scan(&cacheSaved)
+		lc.RouterTokensSaved = rtkSaved + cacheSaved
+		lc.RouterCostSavedUSD = math.Round(float64(lc.RouterTokensSaved)*0.000003*10000) / 10000
+	}
+
+	lc.Header = FormatLiveContextHeader(lc)
+	return lc
+}
+
+// Contract returns the AC5 comic speech-bubble drawer UI contract alongside personas and live telemetry.
+func (s *Service) Contract(ctx context.Context) UIContract {
+	return UIContract{
+		Shortcut:                "Ctrl+K",
+		DrawerStyle:             "comic-speech-bubble",
+		DailyMissionBriefWidget: true,
+		Personas:                s.Personas(),
+		LiveContext:             s.BuildLiveContext(ctx),
+	}
+}
+
 func (s *Service) buildWorkspaceSnapshot(ctx context.Context) string {
+	live := s.BuildLiveContext(ctx)
 	stats, _ := s.hub.Stats(ctx)
 	projects, _ := s.hub.ListProjects(ctx)
 	openTasks, _ := s.hub.ListTasks(ctx, "", "", "", "", 12)
 
 	var sb strings.Builder
+	sb.WriteString(live.Header + "\n")
+	sb.WriteString(fmt.Sprintf("LIVE METRICS: p0_pending=%d | docs_count=%d | 9router_tokens_saved=%d | 9router_cost_saved=$%.4f\n",
+		live.P0TasksPending, live.DocsCount, live.RouterTokensSaved, live.RouterCostSavedUSD))
 	sb.WriteString(fmt.Sprintf("HUB TELEMETRY: docs=%d tasks=%d storageObjects=%d\n", stats.DocsCount, stats.TasksCount, stats.StorageCount))
 	if s.hooks.GetGameSummary != nil {
 		if gameSummary := strings.TrimSpace(s.hooks.GetGameSummary(ctx)); gameSummary != "" {
@@ -523,6 +717,12 @@ func (s *Service) RegisterRoutes(api *echo.Group) {
 	grp.GET("/personas", func(c echo.Context) error {
 		personas := s.Personas()
 		return c.JSON(http.StatusOK, map[string]any{"personas": personas, "count": len(personas)})
+	})
+	grp.GET("/context", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, s.BuildLiveContext(c.Request().Context()))
+	})
+	grp.GET("/contract", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, s.Contract(c.Request().Context()))
 	})
 	grp.GET("/history", func(c echo.Context) error {
 		limit, _ := strconv.Atoi(c.QueryParam("limit"))
