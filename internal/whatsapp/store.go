@@ -73,6 +73,7 @@ type Stats struct {
 	ConnectedCount int    `json:"connectedCount"`
 	ChatsCount     int    `json:"chatsCount"`
 	MessagesCount  int    `json:"messagesCount"`
+	MediaCount     int    `json:"mediaCount"`
 	Engine         string `json:"engine"`
 }
 
@@ -117,6 +118,18 @@ CREATE TABLE IF NOT EXISTS wa_messages (
   timestamp TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_wa_messages_device_chat_ts ON wa_messages(device_id, chat_jid, timestamp DESC);
+
+CREATE TABLE IF NOT EXISTS wa_media (
+  media_id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL,
+  filename TEXT NOT NULL DEFAULT '',
+  mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+  sha256 TEXT NOT NULL DEFAULT '',
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  storage_object_id TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_wa_media_device_created ON wa_media(device_id, created_at DESC);
 `
 	if _, err := db.Exec(schema); err != nil {
 		return fmt.Errorf("migrate whatsapp schema: %w", err)
@@ -248,7 +261,8 @@ WHERE device_id = ?`, status, jid, jid, now, cleanID)
 	return err
 }
 
-func (m *Manager) updateDeviceConfigRow(ctx context.Context, deviceID string, patch DeviceConfigPatch) (DeviceRecord, error) {
+func (m *Manager) updateDeviceConfigRow(ctx context.Context, deviceID string, patch DeviceConfigPatch) (DeviceRecord,
+	error) {
 	existing, err := m.getDeviceRow(ctx, deviceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		existing, err = m.upsertDeviceRow(ctx, deviceID, "")
@@ -308,6 +322,9 @@ func (m *Manager) deleteDeviceRows(ctx context.Context, deviceID string) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if _, err := tx.ExecContext(ctx, `DELETE FROM wa_media WHERE device_id = ?`, cleanID); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM wa_messages WHERE device_id = ?`, cleanID); err != nil {
 		return err
 	}
@@ -524,6 +541,9 @@ func (m *Manager) queryStats(ctx context.Context) (Stats, error) {
 	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM wa_messages`).Scan(&stats.MessagesCount); err != nil {
 		return Stats{}, err
 	}
+	if err := m.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM wa_media`).Scan(&stats.MediaCount); err != nil {
+		return Stats{}, err
+	}
 
 	m.mu.RLock()
 	for _, sess := range m.sessions {
@@ -543,4 +563,100 @@ func (m *Manager) queryStats(ctx context.Context) (Stats, error) {
 		}
 	}
 	return stats, nil
+}
+
+func (m *Manager) upsertMediaMetadataRow(ctx context.Context, meta MediaMetadata) error {
+	if strings.TrimSpace(meta.MediaID) == "" {
+		return errors.New("media id is required")
+	}
+	if strings.TrimSpace(meta.CreatedAt) == "" {
+		meta.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	_, err := m.db.ExecContext(ctx, `
+INSERT INTO wa_media (media_id, device_id, filename, mime_type, sha256, size_bytes, storage_object_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(media_id) DO UPDATE SET
+  filename = excluded.filename,
+  mime_type = excluded.mime_type,
+  sha256 = excluded.sha256,
+  size_bytes = excluded.size_bytes,
+  storage_object_id = CASE WHEN excluded.storage_object_id != '' THEN excluded.storage_object_id ELSE wa_media.storage_object_id END
+`, meta.MediaID, normalizeDeviceID(meta.DeviceID), meta.Filename, meta.MimeType, meta.SHA256, meta.SizeBytes, meta.StorageObjectID, meta.CreatedAt)
+	return err
+}
+
+func (m *Manager) getMediaMetadataRow(ctx context.Context, mediaID string) (MediaMetadata, error) {
+	var meta MediaMetadata
+	err := m.db.QueryRowContext(ctx, `
+SELECT media_id, device_id, filename, mime_type, sha256, size_bytes, storage_object_id, created_at
+FROM wa_media WHERE media_id = ?`, strings.TrimSpace(mediaID)).Scan(
+		&meta.MediaID, &meta.DeviceID, &meta.Filename, &meta.MimeType,
+		&meta.SHA256, &meta.SizeBytes, &meta.StorageObjectID, &meta.CreatedAt,
+	)
+	if err != nil {
+		return MediaMetadata{}, err
+	}
+	return meta, nil
+}
+
+func (m *Manager) listInboxRows(ctx context.Context, deviceID, chatJID, searchQuery string, limit,
+	offset int) ([]MessageRecord, int, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var clauses []string
+	var args []any
+	if trimmedDevice := strings.TrimSpace(deviceID); trimmedDevice != "" {
+		clauses = append(clauses, "device_id = ?")
+		args = append(args, normalizeDeviceID(trimmedDevice))
+	}
+	if trimmedChat := strings.TrimSpace(chatJID); trimmedChat != "" {
+		clauses = append(clauses, "chat_jid = ?")
+		args = append(args, trimmedChat)
+	}
+	if trimmedQuery := strings.TrimSpace(searchQuery); trimmedQuery != "" {
+		pattern := "%" + strings.ToLower(trimmedQuery) + "%"
+		clauses = append(clauses, "(LOWER(body) LIKE ? OR LOWER(sender_jid) LIKE ? OR LOWER(chat_jid) LIKE ?)")
+		args = append(args, pattern, pattern, pattern)
+	}
+	whereClause := ""
+	if len(clauses) > 0 {
+		whereClause = "WHERE " + strings.Join(clauses, " AND ")
+	}
+
+	var total int
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM wa_messages %s", whereClause)
+	if err := m.db.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
+	queryArgs := append(append([]any{}, args...), limit, offset)
+	rows, err := m.db.QueryContext(ctx, fmt.Sprintf(`
+SELECT id, device_id, chat_jid, sender_jid, from_me, msg_type, body, media_object_id, status, timestamp
+FROM wa_messages %s
+ORDER BY timestamp DESC, id DESC
+LIMIT ? OFFSET ?`, whereClause), queryArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	items := make([]MessageRecord, 0)
+	for rows.Next() {
+		var record MessageRecord
+		var fromMeInt int
+		if err := rows.Scan(
+			&record.ID, &record.DeviceID, &record.ChatJID, &record.SenderJID,
+			&fromMeInt, &record.MsgType, &record.Body, &record.MediaObjectID,
+			&record.Status, &record.Timestamp,
+		); err != nil {
+			return nil, 0, err
+		}
+		record.FromMe = fromMeInt == 1
+		items = append(items, record)
+	}
+	return items, total, rows.Err()
 }

@@ -3,7 +3,6 @@ package whatsapp
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
@@ -22,7 +21,6 @@ import (
 	"unicode"
 
 	"github.com/A-L-L-A-H/mw-echo/internal/store"
-	qrcode "github.com/skip2/go-qrcode"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	wastore "go.mau.fi/whatsmeow/store"
@@ -38,7 +36,8 @@ import (
 type AutoReplyFunc func(ctx context.Context, agentID, sender, text string) (string, error)
 
 // ArchiveMediaFunc persists WhatsApp media bytes into the mw-echo storage pool and returns the object ID.
-type ArchiveMediaFunc func(ctx context.Context, project, logicalPath, filename, mimeType string, content []byte) (string, error)
+type ArchiveMediaFunc func(ctx context.Context, project, logicalPath, filename, mimeType string,
+	content []byte) (string, error)
 
 // Options configures authentication, default webhooks, and integration hooks for Manager.
 type Options struct {
@@ -46,8 +45,11 @@ type Options struct {
 	BasicPass            string
 	DefaultWebhookURL    string
 	DefaultWebhookSecret string
+	AIGatewayURL         string
 	AutoReply            AutoReplyFunc
 	ArchiveMedia         ArchiveMediaFunc
+	MediaUploadStream    MediaStreamUploadFunc
+	MediaDownloadStream  MediaStreamDownloadFunc
 }
 
 // LoginResult contains live QR code assets and session state for device linking.
@@ -135,10 +137,20 @@ func NewManager(hub *store.HubStore, opts Options) (*Manager, error) {
 	}
 
 	sessionsPath := filepath.Join(hub.DataDir(), "whatsapp_sessions.db")
-	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)", filepath.ToSlash(sessionsPath))
+	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)",
+		filepath.ToSlash(sessionsPath))
 	container, err := sqlstore.New(context.Background(), "sqlite", dsn, waLog.Noop)
 	if err != nil {
 		return nil, fmt.Errorf("open whatsmeow sqlite store: %w", err)
+	}
+
+	httpClient := &http.Client{Timeout: 15 * time.Second}
+	if opts.AutoReply == nil && strings.TrimSpace(opts.AIGatewayURL) != "" {
+		adapterFn, adapterErr := NewAIGatewayAutoReply(opts.AIGatewayURL, httpClient, "")
+		if adapterErr != nil {
+			return nil, fmt.Errorf("init ai gateway auto-reply: %w", adapterErr)
+		}
+		opts.AutoReply = adapterFn
 	}
 
 	rootCtx, rootCancel := context.WithCancel(context.Background())
@@ -147,7 +159,7 @@ func NewManager(hub *store.HubStore, opts Options) (*Manager, error) {
 		db:            hub.DB(),
 		container:     container,
 		opts:          opts,
-		httpClient:    &http.Client{Timeout: 15 * time.Second},
+		httpClient:    httpClient,
 		rootCtx:       rootCtx,
 		rootCancel:    rootCancel,
 		sessions:      make(map[string]*deviceSession),
@@ -233,7 +245,8 @@ func (m *Manager) GetDeviceStatus(ctx context.Context, deviceID string) (DeviceR
 }
 
 // UpdateDeviceConfig patches label, webhook settings, AI auto-reply, or pool archiving for a device.
-func (m *Manager) UpdateDeviceConfig(ctx context.Context, deviceID string, patch DeviceConfigPatch) (DeviceRecord, error) {
+func (m *Manager) UpdateDeviceConfig(ctx context.Context, deviceID string, patch DeviceConfigPatch) (DeviceRecord,
+	error) {
 	updated, err := m.updateDeviceConfigRow(ctx, deviceID, patch)
 	if err != nil {
 		return DeviceRecord{}, err
@@ -522,7 +535,8 @@ func (m *Manager) DeleteDevice(ctx context.Context, deviceID string) error {
 }
 
 // SendText sends a plain or reply/mention text message from a connected device.
-func (m *Manager) SendText(ctx context.Context, deviceID, phone, message, replyToID string, mentions []string) (SendResult, error) {
+func (m *Manager) SendText(ctx context.Context, deviceID, phone, message, replyToID string,
+	mentions []string) (SendResult, error) {
 	cleanID := normalizeDeviceID(deviceID)
 	trimmedMsg := strings.TrimSpace(message)
 	if trimmedMsg == "" {
@@ -592,12 +606,14 @@ func (m *Manager) SendText(ctx context.Context, deviceID, phone, message, replyT
 }
 
 // SendMedia uploads and sends an image, video, audio, or document attachment.
-func (m *Manager) SendMedia(ctx context.Context, deviceID, phone, kind, filename, mimeType string, mediaBytes []byte, caption string, ptt bool) (SendResult, error) {
+func (m *Manager) SendMedia(ctx context.Context, deviceID, phone, kind, filename, mimeType string, mediaBytes []byte,
+	caption string, ptt bool) (SendResult, error) {
 	return m.SendMediaWithReply(ctx, deviceID, phone, kind, filename, mimeType, mediaBytes, caption, "", ptt)
 }
 
 // SendMediaWithReply uploads and sends a media attachment with optional quoted reply context.
-func (m *Manager) SendMediaWithReply(ctx context.Context, deviceID, phone, kind, filename, mimeType string, mediaBytes []byte, caption, replyToID string, ptt bool) (SendResult, error) {
+func (m *Manager) SendMediaWithReply(ctx context.Context, deviceID, phone, kind, filename, mimeType string,
+	mediaBytes []byte, caption, replyToID string, ptt bool) (SendResult, error) {
 	cleanID := normalizeDeviceID(deviceID)
 	if len(mediaBytes) == 0 {
 		return SendResult{}, errors.New("media payload is empty")
@@ -727,12 +743,22 @@ func (m *Manager) SendMediaWithReply(ctx context.Context, deviceID, phone, kind,
 	m.cacheMedia(msgID, resolvedName, resolvedMime, mediaBytes)
 
 	mediaObjectID := ""
-	if deviceRow, rowErr := m.getDeviceRow(ctx, cleanID); rowErr == nil && deviceRow.ArchiveToPool && m.opts.ArchiveMedia != nil {
-		logicalPath := fmt.Sprintf("%s/%s/%s_%s", cleanID, sanitizePathSegment(targetJID.ToNonAD().String()), msgID, resolvedName)
-		if archivedID, archErr := m.opts.ArchiveMedia(ctx, "whatsapp", logicalPath, resolvedName, resolvedMime, mediaBytes); archErr == nil {
-			mediaObjectID = archivedID
+	if deviceRow, rowErr := m.getDeviceRow(ctx, cleanID); rowErr == nil && deviceRow.ArchiveToPool {
+		logicalPath := fmt.Sprintf("%s/%s/%s_%s", cleanID, sanitizePathSegment(targetJID.ToNonAD().String()), msgID,
+			resolvedName)
+		if m.opts.MediaUploadStream != nil {
+			if archivedID, archErr := m.opts.MediaUploadStream(ctx, "whatsapp", logicalPath, resolvedName, resolvedMime,
+				bytes.NewReader(mediaBytes)); archErr == nil {
+				mediaObjectID = archivedID
+			}
+		} else if m.opts.ArchiveMedia != nil {
+			if archivedID, archErr := m.opts.ArchiveMedia(ctx, "whatsapp", logicalPath, resolvedName, resolvedMime,
+				mediaBytes); archErr == nil {
+				mediaObjectID = archivedID
+			}
 		}
 	}
+	m.indexMessageMediaMetadata(ctx, cleanID, msgID, resolvedName, resolvedMime, mediaObjectID, mediaBytes)
 
 	bodyPreview := strings.TrimSpace(caption)
 	if bodyPreview == "" {
@@ -767,6 +793,58 @@ func (m *Manager) SendMediaWithReply(ctx context.Context, deviceID, phone, kind,
 		ID:        msgID,
 		Timestamp: tsFormatted,
 	}, nil
+}
+
+// SendEnvelope validates and dispatches a unified text, interactive, or media message envelope.
+func (m *Manager) SendEnvelope(ctx context.Context, env SendMessageEnvelope) (SendResult, error) {
+	if err := env.Validate(); err != nil {
+		return SendResult{}, err
+	}
+	deviceID := normalizeDeviceID(firstNonEmpty(env.DeviceID, env.DeviceIDCamel, "default"))
+	replyID := firstNonEmpty(env.ReplyMessageID, env.ReplyToID)
+	kind := strings.ToLower(strings.TrimSpace(env.Type))
+
+	switch kind {
+	case "text":
+		return m.SendText(ctx, deviceID, env.Phone, env.Message, replyID, env.Mentions)
+	case "interactive":
+		textBody := RenderInteractiveText(env.Interactive)
+		if strings.TrimSpace(textBody) == "" {
+			textBody = env.Message
+		}
+		return m.SendText(ctx, deviceID, env.Phone, textBody, replyID, env.Mentions)
+	default:
+		var mediaBytes []byte
+		resolvedName := strings.TrimSpace(env.Filename)
+		resolvedMime := strings.TrimSpace(env.MimeType)
+		if strings.TrimSpace(env.MediaBase64) != "" {
+			decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(env.MediaBase64))
+			if err != nil {
+				return SendResult{}, fmt.Errorf("decode media_base64: %w", err)
+			}
+			mediaBytes = decoded
+		} else {
+			meta, body, err := m.StreamDownloadMedia(ctx, deviceID, env.MediaID)
+			if err != nil {
+				return SendResult{}, fmt.Errorf("resolve media_id %q: %w", env.MediaID, err)
+			}
+			raw, readErr := io.ReadAll(io.LimitReader(body, 64*1024*1024))
+			_ = body.Close()
+			if readErr != nil {
+				return SendResult{}, readErr
+			}
+			mediaBytes = raw
+			if resolvedName == "" {
+				resolvedName = meta.Filename
+			}
+			if resolvedMime == "" {
+				resolvedMime = meta.MimeType
+			}
+		}
+		caption := firstNonEmpty(env.Caption, env.Message)
+		return m.SendMediaWithReply(ctx, deviceID, env.Phone, kind, resolvedName, resolvedMime, mediaBytes, caption, replyID,
+			env.PTT)
+	}
 }
 
 // SendPresence broadcasts global availability or per-chat composing/recording state.
@@ -835,7 +913,8 @@ func (m *Manager) MarkRead(ctx context.Context, deviceID, messageID, chatJID, se
 	if err != nil {
 		return err
 	}
-	if err := client.MarkRead(ctx, []types.MessageID{types.MessageID(messageID)}, time.Now().UTC(), targetChat, parsedSender); err != nil {
+	if err := client.MarkRead(ctx, []types.MessageID{types.MessageID(messageID)}, time.Now().UTC(), targetChat,
+		parsedSender); err != nil {
 		return err
 	}
 	_ = m.updateMessageRow(ctx, messageID, "", "read", false)
@@ -883,7 +962,8 @@ func (m *Manager) EditMessage(ctx context.Context, deviceID, messageID, phone, n
 		return SendResult{}, err
 	}
 
-	editMsg := client.BuildEdit(targetChat, types.MessageID(messageID), &waE2E.Message{Conversation: proto.String(trimmedNew)})
+	editMsg := client.BuildEdit(targetChat, types.MessageID(messageID),
+		&waE2E.Message{Conversation: proto.String(trimmedNew)})
 	sendResp, err := client.SendMessage(ctx, targetChat, editMsg)
 	if err != nil {
 		return SendResult{}, fmt.Errorf("edit message: %w", err)
@@ -922,7 +1002,8 @@ func (m *Manager) RevokeMessage(ctx context.Context, deviceID, messageID, phone 
 }
 
 // DownloadMessageMedia retrieves media bytes from local memory cache, WhatsApp servers, or HubStore blob storage.
-func (m *Manager) DownloadMessageMedia(ctx context.Context, deviceID, messageID string) (string, string, []byte, error) {
+func (m *Manager) DownloadMessageMedia(ctx context.Context, deviceID, messageID string) (string, string, []byte,
+	error) {
 	trimmedID := strings.TrimSpace(messageID)
 	if trimmedID == "" {
 		return "", "", nil, errors.New("message id is required")
@@ -1047,7 +1128,8 @@ func (m *Manager) handleClientEvent(deviceID string, client *whatsmeow.Client, r
 	}
 }
 
-func (m *Manager) processIncomingMessage(ctx context.Context, deviceID string, client *whatsmeow.Client, evt *events.Message) error {
+func (m *Manager) processIncomingMessage(ctx context.Context, deviceID string, client *whatsmeow.Client,
+	evt *events.Message) error {
 	if evt == nil {
 		return errors.New("message event is nil")
 	}
@@ -1080,13 +1162,23 @@ func (m *Manager) processIncomingMessage(ctx context.Context, deviceID string, c
 
 	if extracted.downloadable != nil {
 		m.rememberDownloadable(cleanID, msgID, extracted.downloadable, extracted.filename, extracted.mimeType)
-		if client != nil && deviceRow.ArchiveToPool && m.opts.ArchiveMedia != nil {
+		if client != nil && deviceRow.ArchiveToPool {
 			if downloadedBytes, dlErr := client.Download(ctx, extracted.downloadable); dlErr == nil && len(downloadedBytes) > 0 {
 				m.cacheMedia(msgID, extracted.filename, extracted.mimeType, downloadedBytes)
 				logicalPath := fmt.Sprintf("%s/%s/%s_%s", cleanID, sanitizePathSegment(chatJID), msgID, extracted.filename)
-				if archivedID, archErr := m.opts.ArchiveMedia(ctx, "whatsapp", logicalPath, extracted.filename, extracted.mimeType, downloadedBytes); archErr == nil {
-					mediaObjectID = archivedID
+				if m.opts.MediaUploadStream != nil {
+					if archivedID, archErr := m.opts.MediaUploadStream(ctx, "whatsapp", logicalPath, extracted.filename,
+						extracted.mimeType, bytes.NewReader(downloadedBytes)); archErr == nil {
+						mediaObjectID = archivedID
+					}
+				} else if m.opts.ArchiveMedia != nil {
+					if archivedID, archErr := m.opts.ArchiveMedia(ctx, "whatsapp", logicalPath, extracted.filename, extracted.mimeType,
+						downloadedBytes); archErr == nil {
+						mediaObjectID = archivedID
+					}
 				}
+				m.indexMessageMediaMetadata(ctx, cleanID, msgID, extracted.filename, extracted.mimeType, mediaObjectID,
+					downloadedBytes)
 			}
 		}
 	}
@@ -1199,9 +1291,7 @@ func (m *Manager) dispatchWebhook(targetURL, signingSecret, deviceID string, eve
 	httpReq.Header.Set("X-Device-Id", deviceID)
 	httpReq.Header.Set("User-Agent", "mw-echo-whatsapp/1.0")
 	if signingSecret != "" {
-		mac := hmac.New(sha256.New, []byte(signingSecret))
-		mac.Write(encodedBody)
-		httpReq.Header.Set("X-Hub-Signature-256", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+		httpReq.Header.Set("X-Hub-Signature-256", SignWebhookPayload([]byte(signingSecret), encodedBody))
 	}
 
 	httpResp, err := m.httpClient.Do(httpReq)
@@ -1212,7 +1302,8 @@ func (m *Manager) dispatchWebhook(targetURL, signingSecret, deviceID string, eve
 	_, _ = io.Copy(io.Discard, io.LimitReader(httpResp.Body, 4096))
 }
 
-func (m *Manager) consumeQRChannel(deviceID string, sess *deviceSession, qrChan <-chan whatsmeow.QRChannelItem, firstReady chan<- struct{}) {
+func (m *Manager) consumeQRChannel(deviceID string, sess *deviceSession, qrChan <-chan whatsmeow.QRChannelItem,
+	firstReady chan<- struct{}) {
 	signaled := false
 	signalOnce := func() {
 		if !signaled {
@@ -1273,13 +1364,9 @@ func (m *Manager) applySessionQR(sess *deviceSession, rawQR string) error {
 }
 
 func encodeQRCode(rawQR string) ([]byte, string, error) {
-	trimmed := strings.TrimSpace(rawQR)
-	if trimmed == "" {
-		return nil, "", errors.New("qr payload is empty")
-	}
-	pngBytes, err := qrcode.Encode(trimmed, qrcode.Medium, 256)
+	pngBytes, err := GenerateQRPNG(rawQR)
 	if err != nil {
-		return nil, "", fmt.Errorf("encode qr png: %w", err)
+		return nil, "", err
 	}
 	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes)
 	return pngBytes, dataURL, nil
@@ -1306,7 +1393,8 @@ func (m *Manager) findSession(deviceID string) *deviceSession {
 	return m.sessions[normalizeDeviceID(deviceID)]
 }
 
-func (m *Manager) ensureClient(ctx context.Context, deviceID, storedJID string) (*deviceSession, *whatsmeow.Client, error) {
+func (m *Manager) ensureClient(ctx context.Context, deviceID, storedJID string) (*deviceSession, *whatsmeow.Client,
+	error) {
 	sess := m.getOrCreateSession(deviceID)
 	sess.mu.Lock()
 	if sess.client != nil {
@@ -1464,7 +1552,8 @@ func (m *Manager) cacheMedia(messageID, filename, mimeType string, content []byt
 	m.mu.Unlock()
 }
 
-func (m *Manager) rememberDownloadable(deviceID, messageID string, downloadable whatsmeow.DownloadableMessage, filename, mimeType string) {
+func (m *Manager) rememberDownloadable(deviceID, messageID string, downloadable whatsmeow.DownloadableMessage, filename,
+	mimeType string) {
 	m.mu.Lock()
 	if len(m.downloadables) >= 512 {
 		for oldestKey := range m.downloadables {

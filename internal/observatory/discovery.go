@@ -98,7 +98,8 @@ func DiscoverServices(ctx context.Context, probes []ServiceProbe) []DiscoveredSe
 			endpoint := addr
 			detail := "port open"
 			status := "online"
-			if probe.HealthURI != "" && (strings.HasPrefix(probe.Protocol, "http") || strings.HasPrefix(probe.Protocol, "otlp-http")) {
+			if probe.HealthURI != "" && (strings.HasPrefix(probe.Protocol, "http") || strings.HasPrefix(probe.Protocol,
+				"otlp-http")) {
 				endpoint = fmt.Sprintf("http://%s", addr)
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+probe.HealthURI, nil)
 				if err == nil {

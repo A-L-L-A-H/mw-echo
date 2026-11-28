@@ -157,7 +157,8 @@ func TestV2_ArxivCyberKEVAndUSGSGeoConnectorsAndIngestion(t *testing.T) {
 		t.Fatalf("unexpected kev[0] fields: %+v", kevRes.Records[0])
 	}
 	if kevRes.Records[0].ImpactHint != 0.9 || kevRes.Records[0].UrgencyHint != 0.98 {
-		t.Fatalf("expected ransomware KEV impact=0.9 urgency=0.98, got impact=%v urgency=%v", kevRes.Records[0].ImpactHint, kevRes.Records[0].UrgencyHint)
+		t.Fatalf("expected ransomware KEV impact=0.9 urgency=0.98, got impact=%v urgency=%v", kevRes.Records[0].ImpactHint,
+			kevRes.Records[0].UrgencyHint)
 	}
 	if kevRes.Records[1].UrgencyHint != 0.92 {
 		t.Fatalf("expected non-ransomware KEV urgency=0.92, got %v", kevRes.Records[1].UrgencyHint)
@@ -192,7 +193,8 @@ func TestV2_ArxivCyberKEVAndUSGSGeoConnectorsAndIngestion(t *testing.T) {
 	if err := json.Unmarshal([]byte(geoRec.PayloadJSON), &geoPayload); err != nil {
 		t.Fatalf("unmarshal usgs payload: %v", err)
 	}
-	if geoPayload.Lat != 37.42 || geoPayload.Lon != 142.15 || geoPayload.DepthKm != 35.5 || geoPayload.Magnitude != 6.8 || geoPayload.Tsunami != 1 {
+	if geoPayload.Lat != 37.42 || geoPayload.Lon != 142.15 || geoPayload.DepthKm != 35.5 || geoPayload.Magnitude != 6.8 ||
+		geoPayload.Tsunami != 1 {
 		t.Fatalf("unexpected usgs payload: %+v", geoPayload)
 	}
 

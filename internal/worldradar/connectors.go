@@ -155,7 +155,8 @@ type atomEntry struct {
 }
 
 func (c *RSSConnector) Collect(ctx context.Context, req CollectRequest) CollectResult {
-	statusCode, respHeaders, bodyBytes, err := performConditionalGET(ctx, req.HTTPClient, req.Target.SourceURI, req.Target.ETag, "application/rss+xml, application/atom+xml, application/xml, text/xml")
+	statusCode, respHeaders, bodyBytes, err := performConditionalGET(ctx, req.HTTPClient, req.Target.SourceURI,
+		req.Target.ETag, "application/rss+xml, application/atom+xml, application/xml, text/xml")
 	if err != nil {
 		return CollectResult{
 			Status:       RunStatusConnectorFailed,
@@ -336,7 +337,8 @@ type githubCommit struct {
 
 func (c *GitHubConnector) Collect(ctx context.Context, req CollectRequest) CollectResult {
 	endpoint, repoSlug := resolveGitHubEndpoint(req.Target.SourceURI, req.GitHubAPIBase)
-	statusCode, respHeaders, bodyBytes, err := performConditionalGET(ctx, req.HTTPClient, endpoint, req.Target.ETag, "application/vnd.github+json")
+	statusCode, respHeaders, bodyBytes, err := performConditionalGET(ctx, req.HTTPClient, endpoint, req.Target.ETag,
+		"application/vnd.github+json")
 	if err != nil {
 		return CollectResult{
 			Status:       RunStatusConnectorFailed,
@@ -429,14 +431,16 @@ func extractRepoSlugFromURL(rawURL string) string {
 	return strings.Trim(parsed.Path, "/")
 }
 
-func parseGitHubPayload(bodyBytes []byte, endpoint, repoSlug, prevCursor string, now time.Time) ([]CollectedRecord, string, error) {
+func parseGitHubPayload(bodyBytes []byte, endpoint, repoSlug, prevCursor string, now time.Time) ([]CollectedRecord,
+	string, error) {
 	trimmed := strings.TrimSpace(string(bodyBytes))
 	if trimmed == "" || trimmed == "[]" {
 		return nil, prevCursor, nil
 	}
 	if strings.HasPrefix(trimmed, "[") {
 		var releases []githubRelease
-		if err := json.Unmarshal(bodyBytes, &releases); err == nil && len(releases) > 0 && (releases[0].TagName != "" || releases[0].ID != 0) {
+		if err := json.Unmarshal(bodyBytes,
+			&releases); err == nil && len(releases) > 0 && (releases[0].TagName != "" || releases[0].ID != 0) {
 			records := make([]CollectedRecord, 0, len(releases))
 			nextCursor := prevCursor
 			for i, rel := range releases {
@@ -557,7 +561,8 @@ type webFeedEntry struct {
 }
 
 func (c *WebFeedConnector) Collect(ctx context.Context, req CollectRequest) CollectResult {
-	statusCode, respHeaders, bodyBytes, err := performConditionalGET(ctx, req.HTTPClient, req.Target.SourceURI, req.Target.ETag, "application/json")
+	statusCode, respHeaders, bodyBytes, err := performConditionalGET(ctx, req.HTTPClient, req.Target.SourceURI,
+		req.Target.ETag, "application/json")
 	if err != nil {
 		return CollectResult{
 			Status:       RunStatusConnectorFailed,
@@ -680,7 +685,8 @@ func parseWebFeedEntries(bodyBytes []byte, prevCursor string) ([]webFeedEntry, s
 	return envelope.Items, cursor, nil
 }
 
-func performConditionalGET(ctx context.Context, client *http.Client, targetURL, etag, acceptHeader string) (int, http.Header, []byte, error) {
+func performConditionalGET(ctx context.Context, client *http.Client, targetURL, etag, acceptHeader string) (int,
+	http.Header, []byte, error) {
 	if client == nil {
 		client = &http.Client{Timeout: 30 * time.Second}
 	}

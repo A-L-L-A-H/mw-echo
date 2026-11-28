@@ -14,9 +14,10 @@ import (
 )
 
 type fleetServiceSpec struct {
-	Key    string
-	Name   string
-	EnvVar string
+	Key       string
+	Name      string
+	EnvVar    string
+	DefaultURL string
 }
 
 var defaultFleetSpecs = []fleetServiceSpec{

@@ -102,7 +102,8 @@ func TestChannelEncryptionAndRedaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal channels: %v", err)
 	}
-	if strings.Contains(string(serialized), rawBotToken) || strings.Contains(string(serialized), shortSecret) || strings.Contains(string(serialized), storedCiphertext) {
+	if strings.Contains(string(serialized), rawBotToken) || strings.Contains(string(serialized),
+		shortSecret) || strings.Contains(string(serialized), storedCiphertext) {
 		t.Fatalf("raw or encrypted secret leaked in ListChannels output: %s", string(serialized))
 	}
 
@@ -228,7 +229,8 @@ func TestTelegramSendAndDeliveryLedger(t *testing.T) {
 	if captured[0].ChatID != "-100555444" || captured[0].ParseMode != "HTML" {
 		t.Fatalf("unexpected telegram payload: %+v", captured[0])
 	}
-	if !strings.Contains(captured[0].Text, "<b>Alert &lt;P0&gt;</b>") || !strings.Contains(captured[0].Text, "latency &amp; packet") {
+	if !strings.Contains(captured[0].Text, "<b>Alert &lt;P0&gt;</b>") || !strings.Contains(captured[0].Text,
+		"latency &amp; packet") {
 		t.Fatalf("unexpected HTML formatted text: %q", captured[0].Text)
 	}
 
@@ -428,7 +430,8 @@ func TestBroadcastFanoutAndRoutes(t *testing.T) {
 	if listResp.Code != http.StatusOK {
 		t.Fatalf("expected 200 on list channels, got %d", listResp.Code)
 	}
-	if strings.Contains(listResp.Body.String(), "SecretTelegramToken") || strings.Contains(listResp.Body.String(), "webhook-active") {
+	if strings.Contains(listResp.Body.String(), "SecretTelegramToken") || strings.Contains(listResp.Body.String(),
+		"webhook-active") {
 		t.Fatalf("GET /channels leaked raw secret: %s", listResp.Body.String())
 	}
 

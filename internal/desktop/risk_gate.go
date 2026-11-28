@@ -217,7 +217,8 @@ func EvaluateAction(action, targetPath, targetCommand, targetEndpointURL string)
 		allowed = false
 		requiresApproval = true
 		reasonCode = "HUMAN_APPROVAL_REQUIRED"
-		reason = fmt.Sprintf("Action %q resolved to risk tier R3 and requires human approval", displayActionLabel(trimmedAction))
+		reason = fmt.Sprintf("Action %q resolved to risk tier R3 and requires human approval",
+			displayActionLabel(trimmedAction))
 	}
 
 	return RiskEvaluation{

@@ -101,6 +101,8 @@ func (m *Manager) RegisterRoutes(app *echo.Echo, api *echo.Group) {
 		waGroup.GET("/chats/:jid/messages", m.handleUIListMessages)
 		waGroup.POST("/send", m.handleUISendText)
 	}
+
+	m.registerV1Routes(app, api)
 }
 
 func (m *Manager) gowaBasicAuthMiddleware() echo.MiddlewareFunc {

@@ -119,7 +119,8 @@ func (m *Manager) RunRepair(ctx context.Context) (DoctorRepairResult, error) {
 	}
 	actionsTaken = append(actionsTaken, "wal_checkpoint_truncate")
 
-	summaryMsg := fmt.Sprintf("Desktop doctor repair completed (actions=%d, pruned=%d)", len(actionsTaken), prunedTempFiles)
+	summaryMsg := fmt.Sprintf("Desktop doctor repair completed (actions=%d, pruned=%d)", len(actionsTaken),
+		prunedTempFiles)
 	if _, logErr := m.Log(ctx, "info", "doctor", summaryMsg, strings.Join(actionsTaken, ", ")); logErr != nil {
 		return DoctorRepairResult{}, fmt.Errorf("log repair event: %w", logErr)
 	}

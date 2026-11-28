@@ -522,6 +522,7 @@ export interface GameBossBattle {
   currentHp: number;
   remainingPct: number;
   defeated: boolean;
+  koRewardXp?: number;
   threatLabel: string;
 }
 
@@ -530,10 +531,28 @@ export interface GameDailyQuest {
   title: string;
   description: string;
   rewardXp: number;
+  stampId?: string;
   progress: number;
   target: number;
   completed: boolean;
   claimed: boolean;
+}
+
+export interface GameStampRecord {
+  id: string;
+  questId: string;
+  title: string;
+  stampColor: string;
+  earned: boolean;
+  earnedCount: number;
+  lastEarnedAt?: string;
+}
+
+export interface GameUIContract {
+  shortcut: string;
+  drawerStyle: string;
+  dailyMissionBriefWidget: boolean;
+  arcadeStampsEnabled: boolean;
 }
 
 export interface GameBadge {
@@ -558,19 +577,30 @@ export interface GameXpEvent {
 
 export interface GameProfile {
   level: number;
+  rankGrade?: string;
   rankTitle: string;
   totalXp: number;
   levelFloorXp: number;
   nextLevelXp: number;
   levelPct: number;
   streakDays: number;
+  dailyBonusXp?: number;
+  dailyBonusCap?: number;
   comboCount: number;
   comboMult: number;
   lastActionAt?: string;
   bossBattles: GameBossBattle[];
   dailyQuests: GameDailyQuest[];
+  stamps?: GameStampRecord[];
   badges: GameBadge[];
   recentEvents: GameXpEvent[];
+  uiContract?: GameUIContract;
+}
+
+export interface GameStampsResponse {
+  stamps: GameStampRecord[];
+  count: number;
+  contract?: GameUIContract;
 }
 
 export interface GameQuestClaimResponse {
@@ -585,7 +615,31 @@ export interface SidekickPersona {
   name: string;
   role: string;
   accent: string;
+  colorName?: string;
   agentProfile: string;
+}
+
+export interface SidekickLiveContext {
+  rank: string;
+  level: number;
+  xp: number;
+  nextLevelXp: number;
+  comboMult: number;
+  bossHealthPct: number;
+  activeBossName?: string;
+  p0TasksPending: number;
+  docsCount: number;
+  routerTokensSaved: number;
+  routerCostSavedUsd: number;
+  header: string;
+}
+
+export interface SidekickContract {
+  shortcut: string;
+  drawerStyle: string;
+  dailyMissionBriefWidget: boolean;
+  personas: SidekickPersona[];
+  liveContext: SidekickLiveContext;
 }
 
 export interface SidekickPersonasResponse {
@@ -1828,6 +1882,10 @@ export function fetchGameProfile(): Promise<GameProfile> {
   return requestJson<GameProfile>('/api/game/profile');
 }
 
+export function fetchGameStamps(): Promise<GameStampsResponse> {
+  return requestJson<GameStampsResponse>('/api/game/stamps');
+}
+
 export function claimGameQuest(questId: string): Promise<GameQuestClaimResponse> {
   return requestJson<GameQuestClaimResponse>(
     `/api/game/quests/${encodeURIComponent(questId)}/claim`,
@@ -1841,6 +1899,14 @@ export function claimGameQuest(questId: string): Promise<GameQuestClaimResponse>
 
 export function fetchSidekickPersonas(): Promise<SidekickPersonasResponse> {
   return requestJson<SidekickPersonasResponse>('/api/assistant/personas');
+}
+
+export function fetchSidekickContext(): Promise<SidekickLiveContext> {
+  return requestJson<SidekickLiveContext>('/api/assistant/context');
+}
+
+export function fetchSidekickContract(): Promise<SidekickContract> {
+  return requestJson<SidekickContract>('/api/assistant/contract');
 }
 
 export function fetchSidekickHistory(limit = 60): Promise<SidekickHistoryResponse> {

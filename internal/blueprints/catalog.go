@@ -228,7 +228,8 @@ func upsertBlueprintTx(ctx context.Context, tx *sql.Tx, blueprint Blueprint) err
 	}
 
 	if _, err := tx.ExecContext(ctx, `
-INSERT INTO paas_blueprints (id, source, slug, name, category, description, version, compose_yaml, tags_json, source_url, updated_at)
+INSERT INTO paas_blueprints (id, source, slug, name, category, description, version, compose_yaml, tags_json,
+	source_url, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
   source = excluded.source,
@@ -460,7 +461,8 @@ ORDER BY CASE WHEN source = 'curated' THEN 0 ELSE 1 END, source ASC
 	sources := make([]SourceStatus, 0)
 	for rows.Next() {
 		var statusRow SourceStatus
-		if err := rows.Scan(&statusRow.Source, &statusRow.Repo, &statusRow.LastSHA, &statusRow.LastSniffAt, &statusRow.ItemsCount); err != nil {
+		if err := rows.Scan(&statusRow.Source, &statusRow.Repo, &statusRow.LastSHA, &statusRow.LastSniffAt,
+			&statusRow.ItemsCount); err != nil {
 			return nil, err
 		}
 		sources = append(sources, statusRow)

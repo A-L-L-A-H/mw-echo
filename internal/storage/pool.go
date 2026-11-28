@@ -184,7 +184,8 @@ func (p *PoolManager) AddProvider(ctx context.Context, input ProviderCreateInput
 
 	switch kind {
 	case "gdrive":
-		if input.GDrive == nil || strings.TrimSpace(input.GDrive.ClientID) == "" || strings.TrimSpace(input.GDrive.ClientSecret) == "" || strings.TrimSpace(input.GDrive.RefreshToken) == "" {
+		if input.GDrive == nil || strings.TrimSpace(input.GDrive.ClientID) == "" ||
+			strings.TrimSpace(input.GDrive.ClientSecret) == "" || strings.TrimSpace(input.GDrive.RefreshToken) == "" {
 			return ProviderRecord{}, errors.New("gdrive requires clientId, clientSecret, and refreshToken")
 		}
 		accountRef = input.GDrive.RootFolder
@@ -220,7 +221,8 @@ func (p *PoolManager) AddProvider(ctx context.Context, input ProviderCreateInput
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	_, err = p.db.ExecContext(ctx, `
-INSERT INTO storage_providers (id, name, kind, account_ref, config_enc, quota_bytes, used_bytes, priority, enabled, last_sync_at, created_at)
+INSERT INTO storage_providers (id, name, kind, account_ref, config_enc, quota_bytes, used_bytes, priority, enabled,
+	last_sync_at, created_at)
 VALUES (?, ?, ?, ?, ?, ?, 0, ?, 1, '', ?)
 `, id, name, kind, accountRef, encConfig, quotaBytes, priority, now)
 	if err != nil {
@@ -255,7 +257,8 @@ FROM storage_providers ORDER BY priority ASC, created_at ASC`)
 	for rows.Next() {
 		var rec ProviderRecord
 		var enabledInt int
-		if err := rows.Scan(&rec.ID, &rec.Name, &rec.Kind, &rec.AccountRef, &rec.QuotaBytes, &rec.UsedBytes, &rec.Priority, &enabledInt, &rec.LastSyncAt, &rec.CreatedAt); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.Name, &rec.Kind, &rec.AccountRef, &rec.QuotaBytes, &rec.UsedBytes, &rec.Priority,
+			&enabledInt, &rec.LastSyncAt, &rec.CreatedAt); err != nil {
 			return nil, err
 		}
 		rec.Enabled = enabledInt == 1
@@ -401,7 +404,8 @@ WHERE l.provider_id = ?`, id).Scan(&trackedBytes)
 	}
 }
 
-func (p *PoolManager) SelectProvider(ctx context.Context, fileSize int64, preferredProviderID string) (*ProviderRecord, error) {
+func (p *PoolManager) SelectProvider(ctx context.Context, fileSize int64, preferredProviderID string) (*ProviderRecord,
+	error) {
 	providers, err := p.ListProviders(ctx)
 	if err != nil {
 		return nil, err
@@ -471,7 +475,8 @@ func (p *PoolManager) SelectProvider(ctx context.Context, fileSize int64, prefer
 	}
 }
 
-func (p *PoolManager) Upload(ctx context.Context, project, logicalPath, filename, mimeType, preferredProviderID string, reader io.Reader) (PooledObject, error) {
+func (p *PoolManager) Upload(ctx context.Context, project, logicalPath, filename, mimeType, preferredProviderID string,
+	reader io.Reader) (PooledObject, error) {
 	project = strings.TrimSpace(project)
 	if project == "" {
 		project = "default"
@@ -632,7 +637,8 @@ func (p *PoolManager) OpenDownload(ctx context.Context, id string) (PooledObject
 		if openErr != nil {
 			return PooledObject{}, nil, openErr
 		}
-		return PooledObject{StorageObject: obj, ProviderID: "local", ProviderKind: "local", ProviderName: "Local Disk"}, f, nil
+		return PooledObject{StorageObject: obj, ProviderID: "local", ProviderKind: "local",
+			ProviderName: "Local Disk"}, f, nil
 	}
 
 	rec, plainCfg, err := p.loadProviderSecret(ctx, provID)
@@ -646,7 +652,7 @@ func (p *PoolManager) OpenDownload(ctx context.Context, id string) (PooledObject
 		if err != nil {
 			return PooledObject{}, nil, err
 		}
-		stream, err = client.Download(ctx, remoteID)
+		stream, _, err = client.Download(ctx, remoteID)
 		if err != nil {
 			return PooledObject{}, nil, err
 		}
@@ -704,7 +710,8 @@ func (p *PoolManager) DeleteObject(ctx context.Context, id string) error {
 	return p.hub.DeleteBlob(ctx, id)
 }
 
-func (p *PoolManager) StartGoogleOAuth(name, clientID, clientSecret, redirectURI string, priority int) (string, string, error) {
+func (p *PoolManager) StartGoogleOAuth(name, clientID, clientSecret, redirectURI string, priority int) (string, string,
+	error) {
 	if strings.TrimSpace(name) == "" || strings.TrimSpace(clientID) == "" || strings.TrimSpace(clientSecret) == "" {
 		return "", "", errors.New("name, clientId, and clientSecret are required")
 	}

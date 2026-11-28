@@ -69,7 +69,8 @@ func CreateWorktree(ctx context.Context, repoDir, branch, targetDir string) (Wor
 		return WorktreeInfo{}, fmt.Errorf("create worktree parent dir: %w", mkdirErr)
 	}
 
-	if _, gitErr := runGitCommand(ctx, realRepoDir, "worktree", "add", "-b", cleanBranch, "--", resolvedTarget); gitErr != nil {
+	if _, gitErr := runGitCommand(ctx, realRepoDir, "worktree", "add", "-b", cleanBranch, "--",
+		resolvedTarget); gitErr != nil {
 		return WorktreeInfo{}, fmt.Errorf("git worktree add: %w", gitErr)
 	}
 

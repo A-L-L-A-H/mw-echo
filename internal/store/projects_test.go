@@ -55,7 +55,8 @@ func TestProjectsCRUDAutoDiscoverAndRollups(t *testing.T) {
 	if len(projects) != 1 || projects[0].Slug != "alpha-app" {
 		t.Fatalf("expected auto-discovered alpha-app project, got %+v", projects)
 	}
-	if projects[0].TotalTasks != 2 || projects[0].DoneTasks != 1 || projects[0].InProgressTasks != 1 || projects[0].DocsCount != 1 {
+	if projects[0].TotalTasks != 2 || projects[0].DoneTasks != 1 || projects[0].InProgressTasks != 1 ||
+		projects[0].DocsCount != 1 {
 		t.Fatalf("unexpected project metrics: %+v", projects[0])
 	}
 	if projects[0].ProgressPct != 50 {

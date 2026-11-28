@@ -36,7 +36,8 @@ func setupTestGateway(t *testing.T) (*store.HubStore, *aigateway.Gateway, *echo.
 	return hub, gw, app
 }
 
-func doJSONRequest(t *testing.T, handler http.Handler, method, target string, payload any, headers map[string]string) *httptest.ResponseRecorder {
+func doJSONRequest(t *testing.T, handler http.Handler, method, target string, payload any,
+	headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	var bodyReader io.Reader
 	if payload != nil {
@@ -315,7 +316,8 @@ func TestExactPromptCacheServesSecondRequestWithZeroUpstreamCalls(t *testing.T) 
 	var stats aigateway.GatewayStats
 	_ = json.Unmarshal(statsRec.Body.Bytes(), &stats)
 	if stats.CacheHits != 1 || stats.CacheTokensSaved != 42 || stats.TotalRequests != 2 {
-		t.Fatalf("unexpected stats: total=%d cacheHits=%d cacheTokensSaved=%d", stats.TotalRequests, stats.CacheHits, stats.CacheTokensSaved)
+		t.Fatalf("unexpected stats: total=%d cacheHits=%d cacheTokensSaved=%d", stats.TotalRequests, stats.CacheHits,
+			stats.CacheTokensSaved)
 	}
 
 	purgeRec := doJSONRequest(t, app, http.MethodDelete, "/api/ai/cache", nil, nil)
@@ -325,7 +327,8 @@ func TestExactPromptCacheServesSecondRequestWithZeroUpstreamCalls(t *testing.T) 
 
 	thirdRec := doJSONRequest(t, app, http.MethodPost, "/v1/chat/completions", reqBody, nil)
 	if thirdRec.Header().Get("X-MW-Echo-Cache") != "MISS" || upstreamHits.Load() != 2 {
-		t.Fatalf("expected cache MISS and upstream hit after purge, header=%q hits=%d", thirdRec.Header().Get("X-MW-Echo-Cache"), upstreamHits.Load())
+		t.Fatalf("expected cache MISS and upstream hit after purge, header=%q hits=%d",
+			thirdRec.Header().Get("X-MW-Echo-Cache"), upstreamHits.Load())
 	}
 }
 
@@ -465,7 +468,8 @@ export const MODEL_PRICING = [
 		t.Fatalf("unexpected first sniff result: %+v", firstResult)
 	}
 	if firstResult.ProvidersFound < 10 || firstResult.ModelsIndexed < 35 {
-		t.Fatalf("expected merged seed + upstream catalog counts, got providers=%d models=%d", firstResult.ProvidersFound, firstResult.ModelsIndexed)
+		t.Fatalf("expected merged seed + upstream catalog counts, got providers=%d models=%d", firstResult.ProvidersFound,
+			firstResult.ModelsIndexed)
 	}
 
 	// Verify searchable catalog endpoint finds newly sniffed models
@@ -495,7 +499,8 @@ export const MODEL_PRICING = [
 	if err != nil {
 		t.Fatalf("third sniff failed: %v", err)
 	}
-	if !thirdResult.Updated || thirdResult.PreviousSHA != "abc111222333444555666777888999000aaabbb1" || thirdResult.UpstreamSHA != nextSHA {
+	if !thirdResult.Updated || thirdResult.PreviousSHA != "abc111222333444555666777888999000aaabbb1" ||
+		thirdResult.UpstreamSHA != nextSHA {
 		t.Fatalf("expected updated=true on new SHA, got: %+v", thirdResult)
 	}
 }
@@ -592,7 +597,8 @@ func TestCavemanCompressionAndHeaderMode(t *testing.T) {
 	}
 	savingsPct := float64(savedTokens) / float64(rawTokens) * 100.0
 	if savingsPct < 30.0 {
-		t.Fatalf("expected >=30%% token savings in caveman mode, got %.1f%% (saved=%d raw=%d, out=%q)", savingsPct, savedTokens, rawTokens, compressedText)
+		t.Fatalf("expected >=30%% token savings in caveman mode, got %.1f%% (saved=%d raw=%d, out=%q)", savingsPct,
+			savedTokens, rawTokens, compressedText)
 	}
 	if !strings.Contains(compressedText, `{"service":"mw-echo"`) {
 		t.Fatalf("expected compacted JSON in caveman output, got: %q", compressedText)

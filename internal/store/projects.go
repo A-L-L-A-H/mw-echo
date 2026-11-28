@@ -242,7 +242,8 @@ ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END, name 
 	bySlug := make(map[string]*ProjectSummary)
 	for rows.Next() {
 		var rec ProjectRecord
-		if err := rows.Scan(&rec.Slug, &rec.Name, &rec.Description, &rec.RepoPath, &rec.Status, &rec.Color, &rec.DefaultAgent, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+		if err := rows.Scan(&rec.Slug, &rec.Name, &rec.Description, &rec.RepoPath, &rec.Status, &rec.Color, &rec.DefaultAgent,
+			&rec.CreatedAt, &rec.UpdatedAt); err != nil {
 			return nil, err
 		}
 		item := &ProjectSummary{

@@ -300,7 +300,8 @@ func (m *Manager) ImportChatGPTJSON(ctx context.Context, rawJSON []byte) (Import
 
 		// Always default allow_cloud_llm to 0 on import; child_sensitive is strictly locked to 0.
 		_, err = tx.ExecContext(ctx, `
-INSERT INTO mem_conversations (id, source, title, sensitivity, allow_cloud_llm, sha256, message_count, created_at, imported_at)
+INSERT INTO mem_conversations (id, source, title, sensitivity, allow_cloud_llm, sha256, message_count, created_at,
+	imported_at)
 VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)
 `, convID, source, title, sensitivity, digest, len(messages), createdAt, importedAt)
 		if err != nil {
@@ -396,7 +397,8 @@ LIMIT ?`, strings.Join(clauses, " AND "))
 
 // SetPrivacy updates a conversation's sensitivity and cloud LLM permission.
 // Hard Privacy Firewall: refuses allowCloudLLM=true whenever sensitivity == 'child_sensitive'.
-func (m *Manager) SetPrivacy(ctx context.Context, convID string, sensitivity string, allowCloudLLM bool) (Conversation, error) {
+func (m *Manager) SetPrivacy(ctx context.Context, convID string, sensitivity string, allowCloudLLM bool) (Conversation,
+	error) {
 	convID = strings.TrimSpace(convID)
 	if convID == "" {
 		return Conversation{}, fmt.Errorf("%w: conversation id is required", ErrValidation)
@@ -408,7 +410,8 @@ func (m *Manager) SetPrivacy(ctx context.Context, convID string, sensitivity str
 		return Conversation{}, fmt.Errorf("%w: invalid sensitivity %q", ErrValidation, sensitivity)
 	}
 	if normalizedSensitivity == SensitivityChildSensitive && allowCloudLLM {
-		return Conversation{}, fmt.Errorf("%w: allow_cloud_llm cannot be enabled for child_sensitive conversations", ErrPrivacyViolation)
+		return Conversation{}, fmt.Errorf("%w: allow_cloud_llm cannot be enabled for child_sensitive conversations",
+			ErrPrivacyViolation)
 	}
 
 	allowInt := 0

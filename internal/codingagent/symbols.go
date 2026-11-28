@@ -214,7 +214,8 @@ func executeSearchSymbols(workDir, query string, limit int) (string, error) {
 	}
 	var builder strings.Builder
 	for _, sym := range symbols {
-		fmt.Fprintf(&builder, "%s:%d [%s/%s] %s — %s\n", sym.FilePath, sym.Line, sym.Language, sym.Kind, sym.Name, sym.Signature)
+		fmt.Fprintf(&builder, "%s:%d [%s/%s] %s — %s\n", sym.FilePath, sym.Line, sym.Language, sym.Kind, sym.Name,
+			sym.Signature)
 	}
 	return strings.TrimRight(builder.String(), "\n"), nil
 }

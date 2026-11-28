@@ -270,7 +270,8 @@ func (e *Engine) ProposeTarget(ctx context.Context, input ProposalInput) (Discov
 
 	_, err = e.hub.DB().ExecContext(ctx, `
 INSERT INTO radar_discovery_proposals
-  (id, instance_id, target_type, canonical_name, connector_id, source_uri, independence_group, reason, status, decision_reason, created_at, decided_at)
+  (id, instance_id, target_type, canonical_name, connector_id, source_uri, independence_group, reason, status,
+  	decision_reason, created_at, decided_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, '')`,
 		propID, instanceID, targetType, canonicalName, connectorID, sourceURI, indGroup, reason, now,
 	)
@@ -390,7 +391,8 @@ FROM radar_discovery_proposals WHERE id = ?`, strings.TrimSpace(proposalID))
 	return prop, err
 }
 
-func (e *Engine) getProposalByInstanceAndURI(ctx context.Context, instanceID, sourceURI string) (DiscoveryProposal, error) {
+func (e *Engine) getProposalByInstanceAndURI(ctx context.Context, instanceID, sourceURI string) (DiscoveryProposal,
+	error) {
 	row := e.hub.DB().QueryRowContext(ctx, `
 SELECT id, instance_id, target_type, canonical_name, connector_id, source_uri, independence_group, reason, status, decision_reason, created_at, decided_at
 FROM radar_discovery_proposals WHERE instance_id = ? AND source_uri = ?`, instanceID, sourceURI)

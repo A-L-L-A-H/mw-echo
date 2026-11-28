@@ -55,6 +55,7 @@ import { DocsTab } from './components/DocsTab';
 import { FleetCockpitTab } from './components/FleetCockpitTab';
 import { FlowsTab } from './components/FlowsTab';
 import { FreeModelsTab } from './components/FreeModelsTab';
+import { GamificationDrawer } from './components/GamificationDrawer';
 import { MemVaultTab } from './components/MemVaultTab';
 import { ObservatoryTab } from './components/ObservatoryTab';
 import { OverviewTab } from './components/OverviewTab';
@@ -134,6 +135,7 @@ export function App() {
   const [gameProfile, setGameProfile] = useState<GameProfile | null>(null);
   const [loadingGame, setLoadingGame] = useState(false);
   const [sidekickOpen, setSidekickOpen] = useState(false);
+  const [gamificationOpen, setGamificationOpen] = useState(false);
 
   const [selectedTaskProject, setSelectedTaskProject] = useState('');
   const [providerPrefill, setProviderPrefill] = useState<ProviderDraftPrefill | null>(null);
@@ -419,6 +421,21 @@ export function App() {
                 {(gameProfile?.comboMult ?? 1) > 1 ? (
                   <span className="-rotate-2 border border-black bg-[#ff2e88] px-1.5 py-0 text-[10px] font-extrabold text-white">
                     {gameProfile?.comboMult.toFixed(1)}X COMBO!
+                  </span>
+                ) : null}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setGamificationOpen(true)}
+                className="riot-btn inline-flex items-center gap-1.5 bg-[#ffe031] px-2.5 py-1 font-display text-[11px] text-[#08080c] uppercase hover:bg-[#00f0ff]"
+                title="Open Arcade HUD & Daily Quests Drawer"
+              >
+                <Trophy className="h-3.5 w-3.5" />
+                ARCADE HUD
+                {claimableQuestsCount > 0 ? (
+                  <span className="border border-black bg-[#ff2e88] px-1 py-0 font-mono text-[9px] text-white">
+                    !{claimableQuestsCount}
                   </span>
                 ) : null}
               </button>
@@ -712,6 +729,17 @@ export function App() {
             reloadGameProfile(),
           ]);
         }}
+        onNotify={pushNotice}
+      />
+
+      <GamificationDrawer
+        isOpen={gamificationOpen}
+        profile={gameProfile}
+        onClose={() => setGamificationOpen(false)}
+        onProfileUpdated={(nextProfile) => setGameProfile(nextProfile)}
+        onReloadProfile={reloadGameProfile}
+        onOpenArena={() => setActiveTab('arena')}
+        onJumpToProjectBoard={handleOpenProjectBoard}
         onNotify={pushNotice}
       />
 

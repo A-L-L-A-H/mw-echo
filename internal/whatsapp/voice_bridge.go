@@ -93,7 +93,8 @@ func (b *VoiceBridge) IsAllowed(sender string) bool {
 }
 
 // Transcribe returns a command envelope; non-allowlisted senders fail closed before any network call.
-func (b *VoiceBridge) Transcribe(ctx context.Context, sender, filename, mimeType string, audio []byte) (VoiceCommandEnvelope, error) {
+func (b *VoiceBridge) Transcribe(ctx context.Context, sender, filename, mimeType string,
+	audio []byte) (VoiceCommandEnvelope, error) {
 	if !b.IsAllowed(sender) {
 		return VoiceCommandEnvelope{}, ErrVoiceSenderNotAllowed
 	}

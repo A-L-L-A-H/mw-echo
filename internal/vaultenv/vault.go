@@ -40,7 +40,8 @@ var (
 )
 
 // UploadBackupFunc uploads an encrypted .env snapshot to external or pooled storage and returns its object ID.
-type UploadBackupFunc func(ctx context.Context, project, logicalPath, filename, mimeType string, content []byte) (string, error)
+type UploadBackupFunc func(ctx context.Context, project, logicalPath, filename, mimeType string,
+	content []byte) (string, error)
 
 // Options configures optional integrations for the secret vault.
 type Options struct {
@@ -400,7 +401,8 @@ func (v *Vault) ExportDotEnv(ctx context.Context, project, envName string) (stri
 	return dotenvContent, nil
 }
 
-func (v *Vault) exportDotEnvWithCount(ctx context.Context, project, envName string) (string, string, string, int, error) {
+func (v *Vault) exportDotEnvWithCount(ctx context.Context, project, envName string) (string, string, string, int,
+	error) {
 	cleanProject, err := normalizeProject(project)
 	if err != nil {
 		return "", "", "", 0, err
@@ -698,7 +700,8 @@ func maskSecretValue(plaintext string) string {
 func sanitizeFilenameSegment(raw string) string {
 	var builder strings.Builder
 	for _, ch := range raw {
-		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_' || ch == '.' {
+		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' &&
+			ch <= '9') || ch == '-' || ch == '_' || ch == '.' {
 			builder.WriteRune(ch)
 		} else {
 			builder.WriteByte('-')

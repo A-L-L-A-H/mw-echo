@@ -38,7 +38,8 @@ func TestExtractMarkdownFromHTML(t *testing.T) {
 </html>`
 
 	md := ExtractMarkdownFromHTML(sampleHTML, "https://radar.example.com/news/today")
-	if strings.Contains(md, "secret-script-noise") || strings.Contains(md, "color: red") || strings.Contains(md, "Nav Home") || strings.Contains(md, "Noise Footer") {
+	if strings.Contains(md, "secret-script-noise") || strings.Contains(md, "color: red") || strings.Contains(md,
+		"Nav Home") || strings.Contains(md, "Noise Footer") {
 		t.Fatalf("non-content chrome was not stripped: %q", md)
 	}
 	expectedSnippets := []string{
@@ -88,12 +89,14 @@ func TestExtractMarkdownRouteAndSSRF(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if result.Title != "Direct Page" || !strings.Contains(result.Markdown, "# Hello") || result.CharCount != len(result.Markdown) {
+	if result.Title != "Direct Page" || !strings.Contains(result.Markdown,
+		"# Hello") || result.CharCount != len(result.Markdown) {
 		t.Fatalf("unexpected extract result: %+v", result)
 	}
 
 	// 2. SSRF block on loopback and RFC1918
-	for _, blockedURL := range []string{"http://127.0.0.1:8080/secret", "http://192.168.1.1/admin", "http://localhost:9000/x"} {
+	for _, blockedURL := range []string{"http://127.0.0.1:8080/secret", "http://192.168.1.1/admin",
+		"http://localhost:9000/x"} {
 		ssrfPayload, _ := json.Marshal(map[string]string{"url": blockedURL})
 		ssrfReq := httptest.NewRequest(http.MethodPost, "/api/radar/extract-markdown", bytes.NewReader(ssrfPayload))
 		ssrfReq.Header.Set("Content-Type", "application/json")

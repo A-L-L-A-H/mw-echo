@@ -82,7 +82,8 @@ func TestNexusPushHookDeliversEventJSON(t *testing.T) {
 
 	select {
 	case delivered := <-receivedCh:
-		if delivered.EventID == "" || delivered.Title != "Quantum Battery Milestone" || delivered.ClusterKey == "" || len(delivered.Domains) == 0 {
+		if delivered.EventID == "" || delivered.Title != "Quantum Battery Milestone" || delivered.ClusterKey == "" ||
+			len(delivered.Domains) == 0 {
 			t.Fatalf("unexpected nexus payload: %+v", delivered)
 		}
 	case <-time.After(3 * time.Second):

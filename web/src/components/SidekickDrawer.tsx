@@ -11,14 +11,16 @@ import {
 } from 'lucide-react';
 import {
   clearSidekickHistory,
+  fetchSidekickContext,
   fetchSidekickHistory,
   fetchSidekickPersonas,
   requestSidekickBrief,
   sendSidekickChat,
+  type SidekickLiveContext,
   type SidekickMessage,
   type SidekickPersona,
 } from '../api';
-import { formatShortTime } from '../utils';
+import { formatCompactNumber, formatShortTime } from '../utils';
 import { ComicSticker, MonoBadge } from './UiPrimitives';
 
 interface SidekickDrawerProps {
@@ -32,30 +34,34 @@ const FALLBACK_PERSONAS: SidekickPersona[] = [
   {
     id: 'tactician',
     name: 'TACTICIAN',
-    role: 'Strategy & Task Ops',
-    accent: '#ffe031',
-    agentProfile: 'default',
+    role: 'Strategic Route Mapping & High-Level Planning',
+    accent: '#3b82f6',
+    colorName: 'Blue',
+    agentProfile: 'claude-code',
   },
   {
     id: 'hacker',
     name: 'HACKER',
-    role: 'Code & Systems Ops',
-    accent: '#00f0ff',
+    role: 'Low-Level Code Execution & Vulnerability Scanning',
+    accent: '#10b981',
+    colorName: 'Emerald',
     agentProfile: 'opencode',
   },
   {
     id: 'oracle',
     name: 'ORACLE',
-    role: 'Docs & Intel Search',
-    accent: '#ff2e88',
+    role: 'Architectural Insights & Deep Diagnostics',
+    accent: '#8b5cf6',
+    colorName: 'Purple',
     agentProfile: 'gemini-cli',
   },
   {
     id: 'dispatcher',
     name: 'DISPATCHER',
-    role: 'WhatsApp & Field Comms',
-    accent: '#a3ff12',
-    agentProfile: 'claude-code',
+    role: 'Task Orchestration & Event Streaming Coordination',
+    accent: '#f59e0b',
+    colorName: 'Amber',
+    agentProfile: 'default',
   },
 ];
 
@@ -80,6 +86,7 @@ export function SidekickDrawer({
   const [activePersonaId, setActivePersonaId] = useState<string>('tactician');
   const [messages, setMessages] = useState<SidekickMessage[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [liveContext, setLiveContext] = useState<SidekickLiveContext | null>(null);
   const [promptInput, setPromptInput] = useState('');
   const [sending, setSending] = useState(false);
   const [briefing, setBriefing] = useState(false);
@@ -90,9 +97,10 @@ export function SidekickDrawer({
   const loadSidekickData = useCallback(async () => {
     setLoadingHistory(true);
     try {
-      const [personaOutcome, historyOutcome] = await Promise.allSettled([
+      const [personaOutcome, historyOutcome, contextOutcome] = await Promise.allSettled([
         fetchSidekickPersonas(),
         fetchSidekickHistory(60),
+        fetchSidekickContext(),
       ]);
       if (
         personaOutcome.status === 'fulfilled' &&
@@ -103,6 +111,9 @@ export function SidekickDrawer({
       }
       if (historyOutcome.status === 'fulfilled') {
         setMessages(historyOutcome.value.messages ?? []);
+      }
+      if (contextOutcome.status === 'fulfilled') {
+        setLiveContext(contextOutcome.value);
       }
     } finally {
       setLoadingHistory(false);
@@ -281,6 +292,18 @@ export function SidekickDrawer({
               CLEAR
             </button>
           </div>
+
+          {liveContext ? (
+            <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border border-black bg-[#13131d] px-2 py-1.5 font-mono text-[10px] font-bold">
+              <span className="text-[#00f0ff]">{liveContext.header}</span>
+              <span className="text-[#a6a2b8]">·</span>
+              <span className="text-[#ffe031]">P0:{liveContext.p0TasksPending}</span>
+              <span className="text-[#a3ff12]">DOCS:{liveContext.docsCount}</span>
+              <span className="text-[#ff2e88]">
+                9ROUTER:{formatCompactNumber(liveContext.routerTokensSaved)}
+              </span>
+            </div>
+          ) : null}
         </div>
 
         <div className="riot-hazard-magenta h-1.5 border-b-2 border-black" />

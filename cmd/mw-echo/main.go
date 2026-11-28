@@ -70,8 +70,10 @@ func main() {
 	addr := flag.String("addr", envOrDefault("MW_ECHO_ADDR", "127.0.0.1:4310"), "HTTP listen address")
 	dataDir := flag.String("data-dir", defaultDataDir(), "SQLite and blob storage directory")
 	authToken := flag.String("token", os.Getenv("MW_ECHO_TOKEN"), "Optional Bearer token for /api/* routes")
-	waUser := flag.String("wa-user", envOrDefault("MW_ECHO_WA_USER", os.Getenv("WHATSAPP_GATEWAY_USERNAME")), "Optional Basic Auth username for GOWA endpoints")
-	waPass := flag.String("wa-pass", envOrDefault("MW_ECHO_WA_PASS", os.Getenv("WHATSAPP_GATEWAY_PASSWORD")), "Optional Basic Auth password for GOWA endpoints")
+	waUser := flag.String("wa-user", envOrDefault("MW_ECHO_WA_USER", os.Getenv("WHATSAPP_GATEWAY_USERNAME")),
+		"Optional Basic Auth username for GOWA endpoints")
+	waPass := flag.String("wa-pass", envOrDefault("MW_ECHO_WA_PASS", os.Getenv("WHATSAPP_GATEWAY_PASSWORD")),
+		"Optional Basic Auth password for GOWA endpoints")
 	flag.Parse()
 
 	hub, err := store.Open(*dataDir)
@@ -134,10 +136,12 @@ func runCodeCommand(args []string) {
 	fs := flag.NewFlagSet("code", flag.ExitOnError)
 	workDir := fs.String("dir", ".", "Workspace directory")
 	dataDir := fs.String("data-dir", defaultDataDir(), "SQLite and blob storage directory")
-	agentProfile := fs.String("agent", envOrDefault("MW_ECHO_CODER_AGENT", codingagent.DefaultAgentProfile), "Magpie agent profile")
+	agentProfile := fs.String("agent", envOrDefault("MW_ECHO_CODER_AGENT", codingagent.DefaultAgentProfile),
+		"Magpie agent profile")
 	model := fs.String("model", "", "Optional explicit model ID override")
 	mode := fs.String("mode", codingagent.ModeAct, "Execution mode: act or plan")
-	gatewayURL := fs.String("gateway", envOrDefault("MW_ECHO_GATEWAY_URL", codingagent.DefaultGatewayURL), "mw-echo AI gateway URL")
+	gatewayURL := fs.String("gateway", envOrDefault("MW_ECHO_GATEWAY_URL", codingagent.DefaultGatewayURL),
+		"mw-echo AI gateway URL")
 	_ = fs.Parse(args)
 
 	prompt := strings.TrimSpace(strings.Join(fs.Args(), " "))
@@ -195,7 +199,8 @@ func runCodeREPL(
 		log.Fatalf("create coding session: %v", err)
 	}
 
-	fmt.Printf("MW-ECHO CODER REPL // session=%s mode=%s agent=%s — /plan /act /model <id> /exit\n", sess.ID, sess.Mode, sess.AgentProfile)
+	fmt.Printf("MW-ECHO CODER REPL // session=%s mode=%s agent=%s — /plan /act /model <id> /exit\n", sess.ID, sess.Mode,
+		sess.AgentProfile)
 
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -213,7 +218,8 @@ func runCodeREPL(
 		}
 		if line == "/plan" {
 			nextMode := codingagent.ModePlan
-			updated, updErr := engine.UpdateSession(context.Background(), sess.ID, codingagent.SessionPatchInput{Mode: &nextMode})
+			updated, updErr := engine.UpdateSession(context.Background(), sess.ID,
+				codingagent.SessionPatchInput{Mode: &nextMode})
 			if updErr != nil {
 				fmt.Fprintf(os.Stderr, "mode update failed: %v\n", updErr)
 				continue
@@ -224,7 +230,8 @@ func runCodeREPL(
 		}
 		if line == "/act" {
 			nextMode := codingagent.ModeAct
-			updated, updErr := engine.UpdateSession(context.Background(), sess.ID, codingagent.SessionPatchInput{Mode: &nextMode})
+			updated, updErr := engine.UpdateSession(context.Background(), sess.ID,
+				codingagent.SessionPatchInput{Mode: &nextMode})
 			if updErr != nil {
 				fmt.Fprintf(os.Stderr, "mode update failed: %v\n", updErr)
 				continue
@@ -239,7 +246,8 @@ func runCodeREPL(
 				fmt.Printf("current model: %s\n", sess.Model)
 				continue
 			}
-			updated, updErr := engine.UpdateSession(context.Background(), sess.ID, codingagent.SessionPatchInput{Model: &nextModel})
+			updated, updErr := engine.UpdateSession(context.Background(), sess.ID,
+				codingagent.SessionPatchInput{Model: &nextModel})
 			if updErr != nil {
 				fmt.Fprintf(os.Stderr, "model update failed: %v\n", updErr)
 				continue
@@ -327,8 +335,10 @@ func runDesktopCommand(args []string) {
 	addr := fs.String("addr", envOrDefault("MW_ECHO_ADDR", "127.0.0.1:4310"), "HTTP listen address")
 	dataDir := fs.String("data-dir", defaultDataDir(), "SQLite and blob storage directory")
 	authToken := fs.String("token", os.Getenv("MW_ECHO_TOKEN"), "Optional Bearer token for /api/* routes")
-	waUser := fs.String("wa-user", envOrDefault("MW_ECHO_WA_USER", os.Getenv("WHATSAPP_GATEWAY_USERNAME")), "Optional Basic Auth username for GOWA endpoints")
-	waPass := fs.String("wa-pass", envOrDefault("MW_ECHO_WA_PASS", os.Getenv("WHATSAPP_GATEWAY_PASSWORD")), "Optional Basic Auth password for GOWA endpoints")
+	waUser := fs.String("wa-user", envOrDefault("MW_ECHO_WA_USER", os.Getenv("WHATSAPP_GATEWAY_USERNAME")),
+		"Optional Basic Auth username for GOWA endpoints")
+	waPass := fs.String("wa-pass", envOrDefault("MW_ECHO_WA_PASS", os.Getenv("WHATSAPP_GATEWAY_PASSWORD")),
+		"Optional Basic Auth password for GOWA endpoints")
 	_ = fs.Parse(args)
 
 	ln, err := net.Listen("tcp", *addr)

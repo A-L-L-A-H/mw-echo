@@ -406,7 +406,8 @@ func TestIncomingMessagePersistenceWebhookSignatureAndAutoReply(t *testing.T) {
 		t.Fatalf("unexpected /api/whatsapp/chats payload: %+v", uiChatsBody)
 	}
 
-	uiMsgsReq := httptest.NewRequest(http.MethodGet, "/api/whatsapp/chats/"+chatJID.String()+"/messages?deviceId=support", nil)
+	uiMsgsReq := httptest.NewRequest(http.MethodGet, "/api/whatsapp/chats/"+chatJID.String()+"/messages?deviceId=support",
+		nil)
 	uiMsgsRec := httptest.NewRecorder()
 	app.ServeHTTP(uiMsgsRec, uiMsgsReq)
 	if uiMsgsRec.Code != http.StatusOK {
@@ -435,7 +436,8 @@ func TestIncomingMessagePersistenceWebhookSignatureAndAutoReply(t *testing.T) {
 	if err := json.Unmarshal(cfgRec.Body.Bytes(), &updatedDev); err != nil {
 		t.Fatalf("decode updated device: %v", err)
 	}
-	if updatedDev.Label != "Support VIP" || updatedDev.AIAutoReply || !updatedDev.ArchiveToPool || !updatedDev.HasWebhookSecret {
+	if updatedDev.Label != "Support VIP" || updatedDev.AIAutoReply || !updatedDev.ArchiveToPool ||
+		!updatedDev.HasWebhookSecret {
 		t.Fatalf("unexpected updated device config: %+v", updatedDev)
 	}
 }

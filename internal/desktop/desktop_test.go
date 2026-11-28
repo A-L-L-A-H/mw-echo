@@ -102,10 +102,11 @@ func TestRedactSensitiveText(t *testing.T) {
 			expected:  []string{"Bearer [REDACTED]", "Basic [REDACTED]", "Token [REDACTED]"},
 		},
 		{
-			name:      "provider_keys",
-			input:     "keys: sk-proj-1234567890abcd ghp_1234567890abcdef gho_abcdef1234567890 glpat-1234567890abcdef xoxb-1234567890-abcdef",
-			forbidden: []string{"sk-proj-1234567890abcd", "ghp_1234567890abcdef", "gho_abcdef1234567890", "glpat-1234567890abcdef", "xoxb-1234567890-abcdef"},
-			expected:  []string{"[REDACTED_API_KEY]"},
+			name:  "provider_keys",
+			input: "keys: sk-proj-1234567890abcd ghp_1234567890abcdef gho_abcdef1234567890 glpat-1234567890abcdef xoxb-1234567890-abcdef",
+			forbidden: []string{"sk-proj-1234567890abcd", "ghp_1234567890abcdef", "gho_abcdef1234567890",
+				"glpat-1234567890abcdef", "xoxb-1234567890-abcdef"},
+			expected: []string{"[REDACTED_API_KEY]"},
 		},
 		{
 			name:      "url_userinfo",
@@ -118,7 +119,8 @@ func TestRedactSensitiveText(t *testing.T) {
 			input:     "password=myPass123 token=tokVal999 secret='secVal888' api_key=keyVal777 custom=alphaSecret99",
 			secrets:   []string{"alphaSecret99"},
 			forbidden: []string{"myPass123", "tokVal999", "secVal888", "keyVal777", "alphaSecret99"},
-			expected:  []string{"password=[REDACTED]", "token=[REDACTED]", "secret=[REDACTED]", "api_key=[REDACTED]", "custom=[REDACTED]"},
+			expected: []string{"password=[REDACTED]", "token=[REDACTED]", "secret=[REDACTED]", "api_key=[REDACTED]",
+				"custom=[REDACTED]"},
 		},
 	}
 
@@ -384,7 +386,8 @@ func TestRunDoctorAndRunRepair(t *testing.T) {
 	for _, check := range initialReport.Checks {
 		checkStatuses[check.ID] = check.Status
 	}
-	for _, expectedID := range []string{"sqlite_integrity", "data_dir_writable", "logs_dir_writable", "easytier_binary", "runtime_memory"} {
+	for _, expectedID := range []string{"sqlite_integrity", "data_dir_writable", "logs_dir_writable", "easytier_binary",
+		"runtime_memory"} {
 		if _, ok := checkStatuses[expectedID]; !ok {
 			t.Fatalf("missing expected doctor check %q", expectedID)
 		}

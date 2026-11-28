@@ -200,7 +200,8 @@ func TestRevealAuditTrailAndEncryptedBackup(t *testing.T) {
 	var uploads []capturedBackupUpload
 
 	vault, hub := openTestVault(t, vaultenv.Options{
-		UploadBackup: func(_ context.Context, project, logicalPath, filename, mimeType string, content []byte) (string, error) {
+		UploadBackup: func(_ context.Context, project, logicalPath, filename, mimeType string, content []byte) (string,
+			error) {
 			copied := make([]byte, len(content))
 			copy(copied, content)
 			uploads = append(uploads, capturedBackupUpload{
@@ -268,7 +269,8 @@ func TestRevealAuditTrailAndEncryptedBackup(t *testing.T) {
 	if bytes.Contains(upload.content, []byte(secretAlpha)) || bytes.Contains(upload.content, []byte(secretBeta)) {
 		t.Fatalf("encrypted backup bytes leaked plaintext secret substrings")
 	}
-	if bytes.Contains(upload.content, []byte("ALPHA_TOKEN")) || bytes.Contains(upload.content, []byte("BETA_SIGNING_KEY")) {
+	if bytes.Contains(upload.content, []byte("ALPHA_TOKEN")) || bytes.Contains(upload.content,
+		[]byte("BETA_SIGNING_KEY")) {
 		t.Fatalf("encrypted backup bytes leaked plaintext key names")
 	}
 
@@ -313,7 +315,8 @@ func TestRevealAuditTrailAndEncryptedBackup(t *testing.T) {
 
 func TestVaultEnvHTTPRoutes(t *testing.T) {
 	vault, _ := openTestVault(t, vaultenv.Options{
-		UploadBackup: func(_ context.Context, project, logicalPath, filename, mimeType string, content []byte) (string, error) {
+		UploadBackup: func(_ context.Context, project, logicalPath, filename, mimeType string, content []byte) (string,
+			error) {
 			return "obj-route-backup", nil
 		},
 	})

@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -40,6 +41,7 @@ import (
 	"github.com/A-L-L-A-H/mw-echo/internal/worldradar"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	_ "modernc.org/sqlite"
 )
 
 //go:embed all:ui/dist
@@ -131,7 +133,7 @@ func taskPriorityXP(priority string) int {
 
 func isReservedBackendPath(reqPath string) bool {
 	reservedPrefixes := []string{
-		"/api", "/v1", "/health",
+		"/api", "/v1", "/health", "/healthz", "/readyz", "/metrics",
 		"/app", "/devices", "/chats", "/chat", "/statics", "/send", "/message",
 	}
 	for _, prefix := range reservedPrefixes {
@@ -166,7 +168,8 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	}
 	obs.SetErrorTriageMonitor(observatory.NewErrorTriageMonitor(observatory.ErrorTriageOptions{
 		OnSpike: func(ctx context.Context, serviceName, sampleError string, count int) error {
-			code := fmt.Sprintf("TRIAGE-%s-%d", strings.ToUpper(strings.ReplaceAll(serviceName, " ", "-")), time.Now().UTC().Unix())
+			code := fmt.Sprintf("TRIAGE-%s-%d", strings.ToUpper(strings.ReplaceAll(serviceName, " ", "-")),
+				time.Now().UTC().Unix())
 			title := fmt.Sprintf("[AUTO-TRIAGE] %s error spike (%d errors): %s", serviceName, count, sampleError)
 			savedTask, taskErr := hub.UpsertTask(ctx, store.TaskRecord{
 				Project:  "mw-echo",
@@ -179,7 +182,8 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 				log.Printf("[observatory/triage] failed to create P1 bounty task for %s: %v", serviceName, taskErr)
 				return taskErr
 			}
-			log.Printf("[observatory/triage] created P1 bounty task %s for %s (%d error spans): %s", savedTask.Code, serviceName, count, sampleError)
+			log.Printf("[observatory/triage] created P1 bounty task %s for %s (%d error spans): %s", savedTask.Code, serviceName,
+				count, sampleError)
 			return nil
 		},
 	}))
@@ -218,8 +222,10 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 				fmt.Sprintf("From %s: %s", sender, text),
 			)
 		},
-		ArchiveMedia: func(ctx context.Context, project, logicalPath, filename, mimeType string, content []byte) (string, error) {
-			savedObj, upErr := pool.Upload(ctx, project, logicalPath, filepath.Base(filename), mimeType, "", bytes.NewReader(content))
+		ArchiveMedia: func(ctx context.Context, project, logicalPath, filename, mimeType string, content []byte) (string,
+			error) {
+			savedObj, upErr := pool.Upload(ctx, project, logicalPath, filepath.Base(filename), mimeType, "",
+				bytes.NewReader(content))
 			if upErr != nil {
 				return "", upErr
 			}
@@ -295,6 +301,15 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 			AwardXP: func(ctx context.Context, eventType, label string, baseXP int, refID string) {
 				_, _ = gameEngine.Award(ctx, eventType, label, baseXP, refID, true)
 			},
+			GetRouterSavings: func(ctx context.Context) (int64, float64) {
+				st, stErr := aiGateway.Stats(ctx)
+				if stErr != nil {
+					return 0, 0
+				}
+				tokens := st.TotalRTKTokensSaved + st.CacheTokensSaved
+				costUSD := math.Round(float64(tokens)*0.000003*10000) / 10000
+				return tokens, costUSD
+			},
 		},
 	})
 	if err != nil {
@@ -310,14 +325,39 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	}
 	worldRadar.StartScheduler(5 * time.Minute)
 
+	radarV1DSN := "file::memory:?_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)"
+	if dataDir := strings.TrimSpace(hub.DataDir()); dataDir != "" {
+		radarV1DBPath := filepath.Join(dataDir, "worldradar-v1.db")
+		radarV1DSN = fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)",
+			filepath.ToSlash(radarV1DBPath))
+	}
+	radarV1DB, err := sql.Open("sqlite", radarV1DSN)
+	if err != nil {
+		panic("open world radar v1 db: " + err.Error())
+	}
+	radarV1DB.SetMaxOpenConns(1)
+	radarV1, err := worldradar.NewRadarEngine(radarV1DB, worldradar.DefaultRadarEngineConfig())
+	if err != nil {
+		_ = radarV1DB.Close()
+		panic("init world radar v1: " + err.Error())
+	}
+	if startErr := radarV1.Start(context.Background()); startErr != nil {
+		_ = radarV1DB.Close()
+		panic("start world radar v1: " + startErr.Error())
+	}
+	hub.RegisterCloser(radarV1DB.Close)
+	hub.RegisterCloser(radarV1.Stop)
+
 	commsMgr, err := comms.NewManager(hub, comms.Options{})
 	if err != nil {
 		panic("init comms manager: " + err.Error())
 	}
 
 	vaultEnv, err := vaultenv.NewVault(hub, vaultenv.Options{
-		UploadBackup: func(ctx context.Context, project, logicalPath, filename, mimeType string, content []byte) (string, error) {
-			savedObj, upErr := pool.Upload(ctx, project, logicalPath, filepath.Base(filename), mimeType, "", bytes.NewReader(content))
+		UploadBackup: func(ctx context.Context, project, logicalPath, filename, mimeType string, content []byte) (string,
+			error) {
+			savedObj, upErr := pool.Upload(ctx, project, logicalPath, filepath.Base(filename), mimeType, "",
+				bytes.NewReader(content))
 			if upErr != nil {
 				return "", upErr
 			}
@@ -508,13 +548,7 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 		return c.Blob(http.StatusOK, "text/html; charset=utf-8", indexHTML)
 	})
 
-	app.GET("/health", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, map[string]any{
-			"status":  "ok",
-			"service": "mw-echo",
-			"dataDir": hub.DataDir(),
-		})
-	})
+	registerProbeRoutes(app, hub)
 
 	// Drop-in FreeLLMAPI compose health probe compatibility
 	app.GET("/api/ping", func(c echo.Context) error {
@@ -542,7 +576,7 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 			}
 			echoURL = scheme + "://" + host
 		}
-		ridURL := firstNonEmpty(cfg.RIDURL, os.Getenv("MW_RID_URL"), "http://127.0.0.1:4320")
+		ridURL := firstNonEmpty(cfg.RIDURL, os.Getenv("MW_RID_URL"), "http://mw-rid:4480")
 		myloveURL := firstNonEmpty(cfg.MyLoveURL, os.Getenv("MW_MYLOVE_URL"), "http://127.0.0.1:4330")
 
 		pairQuery := url.Values{}
@@ -584,7 +618,8 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	// Docs + FTS5 search
 	api.GET("/docs", func(c echo.Context) error {
 		limit, _ := strconv.Atoi(c.QueryParam("limit"))
-		docs, err := hub.ListDocs(c.Request().Context(), c.QueryParam("project"), c.QueryParam("category"), c.QueryParam("q"), limit)
+		docs, err := hub.ListDocs(c.Request().Context(), c.QueryParam("project"), c.QueryParam("category"), c.QueryParam("q"),
+			limit)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
@@ -629,7 +664,8 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	// Tasks (TaskOS v2 compatible)
 	api.GET("/tasks", func(c echo.Context) error {
 		limit, _ := strconv.Atoi(c.QueryParam("limit"))
-		tasks, err := hub.ListTasks(c.Request().Context(), c.QueryParam("project"), c.QueryParam("status"), c.QueryParam("priority"), c.QueryParam("q"), limit)
+		tasks, err := hub.ListTasks(c.Request().Context(), c.QueryParam("project"), c.QueryParam("status"),
+			c.QueryParam("priority"), c.QueryParam("q"), limit)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
@@ -657,7 +693,8 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 		}
 		if strings.EqualFold(saved.Status, "done") {
-			_, _ = gameEngine.Award(c.Request().Context(), "task_done", "Cleared "+saved.Code, taskPriorityXP(saved.Priority), saved.Code, true)
+			_, _ = gameEngine.Award(c.Request().Context(), "task_done", "Cleared "+saved.Code, taskPriorityXP(saved.Priority),
+				saved.Code, true)
 		} else {
 			_, _ = gameEngine.Award(c.Request().Context(), "task_create", "Queued "+saved.Code, 15, saved.Code, true)
 		}
@@ -674,7 +711,8 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid patch JSON"})
 		}
 		prev, _ := hub.GetTask(c.Request().Context(), c.Param("code"))
-		updated, err := hub.UpdateTaskStatus(c.Request().Context(), c.Param("code"), patch.Status, patch.Priority, patch.Title)
+		updated, err := hub.UpdateTaskStatus(c.Request().Context(), c.Param("code"), patch.Status, patch.Priority,
+			patch.Title)
 		if errors.Is(err, sql.ErrNoRows) {
 			return c.JSON(http.StatusNotFound, map[string]string{"error": "task not found"})
 		}
@@ -682,7 +720,8 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		if !strings.EqualFold(prev.Status, "done") && strings.EqualFold(updated.Status, "done") {
-			_, _ = gameEngine.Award(c.Request().Context(), "task_done", "Cleared "+updated.Code, taskPriorityXP(updated.Priority), updated.Code, true)
+			_, _ = gameEngine.Award(c.Request().Context(), "task_done", "Cleared "+updated.Code,
+				taskPriorityXP(updated.Priority), updated.Code, true)
 		}
 		return c.JSON(http.StatusOK, updated)
 	})
@@ -769,7 +808,8 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 		if err != nil {
 			return c.HTML(http.StatusBadRequest, "<h3>Google Drive OAuth failed: "+err.Error()+"</h3>")
 		}
-		return c.HTML(http.StatusOK, "<h3>Connected Google Drive: "+rec.Name+" ("+rec.AccountRef+")</h3><script>setTimeout(()=>location.href='/',1500)</script>")
+		return c.HTML(http.StatusOK,
+			"<h3>Connected Google Drive: "+rec.Name+" ("+rec.AccountRef+")</h3><script>setTimeout(()=>location.href='/',1500)</script>")
 	})
 
 	api.GET("/providers", func(c echo.Context) error {
@@ -877,7 +917,8 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 		project := c.FormValue("project")
 		logicalPath := c.FormValue("logicalPath")
 		providerID := c.FormValue("providerId")
-		saved, err := pool.Upload(c.Request().Context(), project, logicalPath, fileHeader.Filename, fileHeader.Header.Get("Content-Type"), providerID, src)
+		saved, err := pool.Upload(c.Request().Context(), project, logicalPath, fileHeader.Filename,
+			fileHeader.Header.Get("Content-Type"), providerID, src)
 		if err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 		}
@@ -972,7 +1013,8 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 
 	// Unified MCP JSON-RPC 2.0 endpoint
 	api.POST("/mcp", func(c echo.Context) error {
-		return handleMCP(c, hub, pool, waMgr, worldRadar, blueprintCat, flowEngine, commsMgr, vaultEnv, desktopMgr, memMgr, fleetMgr)
+		return handleMCP(c, hub, pool, waMgr, worldRadar, radarV1, blueprintCat, flowEngine, commsMgr, vaultEnv, desktopMgr,
+			memMgr, fleetMgr)
 	})
 
 	// Trigger matching radar_event flows whenever a World Radar instance run completes via HTTP.
@@ -1036,10 +1078,17 @@ func NewEcho(hub *store.HubStore, cfg Config) *echo.Echo {
 	// Sovereign Fleet & ARSY Constitutional Governor (19 FLEET)
 	fleetMgr.RegisterRoutes(api)
 
+	// Versioned /api/v1/* handlers (World Radar v1.0.0 spec, Assistant, Gamification; GOWA v1 mounted via waMgr.RegisterRoutes)
+	v1 := api.Group("/v1")
+	radarV1.RegisterV1Routes(v1)
+	sidekick.RegisterRoutes(v1)
+	gameEngine.RegisterRoutes(v1)
+
 	return app
 }
 
-func callInternalGatewayChat(ctx context.Context, client *http.Client, gatewayURL, agentID, systemPrompt, userPrompt string) (string, error) {
+func callInternalGatewayChat(ctx context.Context, client *http.Client, gatewayURL, agentID, systemPrompt,
+	userPrompt string) (string, error) {
 	reqPayload := map[string]any{
 		"messages": []map[string]string{
 			{"role": "system", "content": systemPrompt},
@@ -1102,6 +1151,7 @@ func handleMCP(
 	pool *storage.PoolManager,
 	waMgr *whatsapp.Manager,
 	worldRadar *worldradar.Engine,
+	radarV1 *worldradar.RadarEngine,
 	blueprintCat *blueprints.Catalog,
 	flowEngine *flows.Engine,
 	commsMgr *comms.Manager,
@@ -1112,14 +1162,18 @@ func handleMCP(
 ) error {
 	var rpc mcpRequest
 	if err := c.Bind(&rpc); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]any{"jsonrpc": "2.0", "id": nil, "error": map[string]any{"code": -32700, "message": "invalid JSON"}})
+		return c.JSON(http.StatusBadRequest, map[string]any{"jsonrpc": "2.0", "id": nil,
+			"error": map[string]any{"code": -32700, "message": "invalid JSON"}})
 	}
 	reply := func(result any) error {
 		return c.JSON(http.StatusOK, map[string]any{"jsonrpc": "2.0", "id": rpc.ID, "result": result})
 	}
 	fail := func(code int, msg string) error {
-		return c.JSON(http.StatusOK, map[string]any{"jsonrpc": "2.0", "id": rpc.ID, "error": map[string]any{"code": code, "message": msg}})
+		return c.JSON(http.StatusOK, map[string]any{"jsonrpc": "2.0", "id": rpc.ID, "error": map[string]any{"code": code,
+			"message": msg}})
 	}
+
+	radarV1Tools := worldradar.MCPTools(radarV1)
 
 	switch rpc.Method {
 	case "initialize":
@@ -1129,33 +1183,77 @@ func handleMCP(
 			"capabilities":    map[string]any{"tools": map[string]any{}},
 		})
 	case "tools/list":
-		return reply(map[string]any{
-			"tools": []map[string]any{
-				{"name": "echo_search_docs", "description": "Full-text search Markdown docs stored in mw-echo.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"query": map[string]string{"type": "string"}, "project": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
-				{"name": "echo_get_doc", "description": "Fetch full Markdown content of a doc by id or relPath.", "inputSchema": map[string]any{"type": "object", "required": []string{"id"}, "properties": map[string]any{"id": map[string]string{"type": "string"}}}},
-				{"name": "echo_list_tasks", "description": "Query canonical tasks by project, status, priority, or keyword.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]string{"type": "string"}, "status": map[string]string{"type": "string"}, "query": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
-				{"name": "echo_update_task", "description": "Update a task's status, priority, or title in mw-echo.", "inputSchema": map[string]any{"type": "object", "required": []string{"code"}, "properties": map[string]any{"code": map[string]string{"type": "string"}, "status": map[string]string{"type": "string"}, "priority": map[string]string{"type": "string"}, "title": map[string]string{"type": "string"}}}},
-				{"name": "echo_list_storage", "description": "List stored binary assets (images, PDFs, media) in mw-echo.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]string{"type": "string"}, "query": map[string]string{"type": "string"}}}},
-				{"name": "echo_list_projects", "description": "List projects with task counts, progress percentages, and milestone rollups.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
-				{"name": "echo_upsert_project", "description": "Create or update a project in mw-echo.", "inputSchema": map[string]any{"type": "object", "required": []string{"slug"}, "properties": map[string]any{"slug": map[string]string{"type": "string"}, "name": map[string]string{"type": "string"}, "description": map[string]string{"type": "string"}, "status": map[string]string{"type": "string"}}}},
-				{"name": "echo_wa_devices", "description": "List connected WhatsApp GOWA multi-device instances.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
-				{"name": "echo_wa_send_message", "description": "Send a WhatsApp message via native Go GOWA.", "inputSchema": map[string]any{"type": "object", "required": []string{"phone", "message"}, "properties": map[string]any{"deviceId": map[string]string{"type": "string"}, "phone": map[string]string{"type": "string"}, "message": map[string]string{"type": "string"}}}},
-				{"name": "echo_wa_list_chats", "description": "List recent WhatsApp conversations stored in mw-echo.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"deviceId": map[string]string{"type": "string"}, "query": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
-				{"name": "echo_wa_get_messages", "description": "Read messages for a WhatsApp chat JID.", "inputSchema": map[string]any{"type": "object", "required": []string{"chatJid"}, "properties": map[string]any{"deviceId": map[string]string{"type": "string"}, "chatJid": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
-				{"name": "echo_radar_events", "description": "List clustered R!OTS World Radar events optionally filtered by domain ID (D01-D23).", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"domain": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
-				{"name": "echo_radar_run", "description": "Execute a World Radar monitoring instance collection & assessment cycle.", "inputSchema": map[string]any{"type": "object", "required": []string{"instanceId"}, "properties": map[string]any{"instanceId": map[string]string{"type": "string"}}}},
-				{"name": "echo_search_blueprints", "description": "Search self-hosted PaaS Docker Compose blueprints via FTS5.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"query": map[string]string{"type": "string"}, "source": map[string]string{"type": "string"}, "category": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
-				{"name": "echo_run_flow", "description": "Execute an automation flow by ID with an optional trigger payload.", "inputSchema": map[string]any{"type": "object", "required": []string{"id"}, "properties": map[string]any{"id": map[string]string{"type": "string"}, "triggerPayload": map[string]string{"type": "string"}}}},
-				{"name": "echo_comms_send", "description": "Send an outbound message or alert through a configured Telegram or Discord channel.", "inputSchema": map[string]any{"type": "object", "required": []string{"body"}, "properties": map[string]any{"channelId": map[string]string{"type": "string"}, "kind": map[string]string{"type": "string"}, "targetRef": map[string]string{"type": "string"}, "title": map[string]string{"type": "string"}, "body": map[string]string{"type": "string"}, "priorityTier": map[string]string{"type": "string"}}}},
-				{"name": "echo_env_keys", "description": "List redacted secret key metadata in VaultEnv for a project and environment (never exposes plaintext secret values).", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]string{"type": "string"}, "env": map[string]string{"type": "string"}}}},
-				{"name": "echo_desktop_doctor", "description": "Run MW-ECHO desktop runtime health diagnostics and generate a redacted support report.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
-				{"name": "echo_local_ai_discover", "description": "Discover local loopback AI runtimes (Ollama, LM Studio, vLLM) and available models.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
-				{"name": "echo_memvault_search", "description": "Full-text search cloud-safe public conversations in local MemVault (strictly enforces cloudSafeOnly=true privacy firewall).", "inputSchema": map[string]any{"type": "object", "required": []string{"query"}, "properties": map[string]any{"query": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
-				{"name": "echo_fleet_probe", "description": "Concurrently probe /health across all registered Sovereign Fleet services.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
-				{"name": "echo_arsy_audit_verify", "description": "Verify the SHA-256 Merkle hash chain integrity of the ARSY constitutional audit log.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
-				{"name": "echo_storage_restore_verify", "description": "Run a non-destructive 9Drive SQLite backup restore & PRAGMA integrity_check verification drill.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"objectId": map[string]string{"type": "string"}}}},
-			},
-		})
+		tools := []map[string]any{
+			{"name": "echo_search_docs", "description": "Full-text search Markdown docs stored in mw-echo.",
+				"inputSchema": map[string]any{"type": "object",
+					"properties": map[string]any{"query": map[string]string{"type": "string"}, "project": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
+			{"name": "echo_get_doc", "description": "Fetch full Markdown content of a doc by id or relPath.",
+				"inputSchema": map[string]any{"type": "object", "required": []string{"id"},
+					"properties": map[string]any{"id": map[string]string{"type": "string"}}}},
+			{"name": "echo_list_tasks", "description": "Query canonical tasks by project, status, priority, or keyword.",
+				"inputSchema": map[string]any{"type": "object",
+					"properties": map[string]any{"project": map[string]string{"type": "string"}, "status": map[string]string{"type": "string"}, "query": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
+			{"name": "echo_update_task", "description": "Update a task's status, priority, or title in mw-echo.",
+				"inputSchema": map[string]any{"type": "object", "required": []string{"code"},
+					"properties": map[string]any{"code": map[string]string{"type": "string"}, "status": map[string]string{"type": "string"}, "priority": map[string]string{"type": "string"}, "title": map[string]string{"type": "string"}}}},
+			{"name": "echo_list_storage", "description": "List stored binary assets (images, PDFs, media) in mw-echo.",
+				"inputSchema": map[string]any{"type": "object",
+					"properties": map[string]any{"project": map[string]string{"type": "string"}, "query": map[string]string{"type": "string"}}}},
+			{"name": "echo_list_projects",
+				"description": "List projects with task counts, progress percentages, and milestone rollups.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+			{"name": "echo_upsert_project", "description": "Create or update a project in mw-echo.",
+				"inputSchema": map[string]any{"type": "object", "required": []string{"slug"},
+					"properties": map[string]any{"slug": map[string]string{"type": "string"}, "name": map[string]string{"type": "string"}, "description": map[string]string{"type": "string"}, "status": map[string]string{"type": "string"}}}},
+			{"name": "echo_radar_events",
+				"description": "List clustered R!OTS World Radar events optionally filtered by domain ID (D01-D23).", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"domain": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
+			{"name": "echo_radar_run", "description": "Execute a World Radar monitoring instance collection & assessment cycle.",
+				"inputSchema": map[string]any{"type": "object", "required": []string{"instanceId"},
+					"properties": map[string]any{"instanceId": map[string]string{"type": "string"}}}},
+			{"name": "echo_search_blueprints", "description": "Search self-hosted PaaS Docker Compose blueprints via FTS5.",
+				"inputSchema": map[string]any{"type": "object",
+					"properties": map[string]any{"query": map[string]string{"type": "string"}, "source": map[string]string{"type": "string"}, "category": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
+			{"name": "echo_run_flow", "description": "Execute an automation flow by ID with an optional trigger payload.",
+				"inputSchema": map[string]any{"type": "object", "required": []string{"id"},
+					"properties": map[string]any{"id": map[string]string{"type": "string"}, "triggerPayload": map[string]string{"type": "string"}}}},
+			{"name": "echo_comms_send",
+				"description": "Send an outbound message or alert through a configured Telegram or Discord channel.", "inputSchema": map[string]any{"type": "object", "required": []string{"body"}, "properties": map[string]any{"channelId": map[string]string{"type": "string"}, "kind": map[string]string{"type": "string"}, "targetRef": map[string]string{"type": "string"}, "title": map[string]string{"type": "string"}, "body": map[string]string{"type": "string"}, "priorityTier": map[string]string{"type": "string"}}}},
+			{"name": "echo_env_keys",
+				"description": "List redacted secret key metadata in VaultEnv for a project and environment (never exposes plaintext secret values).", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"project": map[string]string{"type": "string"}, "env": map[string]string{"type": "string"}}}},
+			{"name": "echo_desktop_doctor",
+				"description": "Run MW-ECHO desktop runtime health diagnostics and generate a redacted support report.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+			{"name": "echo_local_ai_discover",
+				"description": "Discover local loopback AI runtimes (Ollama, LM Studio, vLLM) and available models.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+			{"name": "echo_memvault_search",
+				"description": "Full-text search cloud-safe public conversations in local MemVault (strictly enforces cloudSafeOnly=true privacy firewall).", "inputSchema": map[string]any{"type": "object", "required": []string{"query"}, "properties": map[string]any{"query": map[string]string{"type": "string"}, "limit": map[string]string{"type": "integer"}}}},
+			{"name": "echo_fleet_probe",
+				"description": "Concurrently probe /health across all registered Sovereign Fleet services.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+			{"name": "echo_arsy_audit_verify",
+				"description": "Verify the SHA-256 Merkle hash chain integrity of the ARSY constitutional audit log.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{}}},
+			{"name": "echo_storage_restore_verify",
+				"description": "Run a non-destructive 9Drive SQLite backup restore & PRAGMA integrity_check verification drill.", "inputSchema": map[string]any{"type": "object", "properties": map[string]any{"objectId": map[string]string{"type": "string"}}}},
+		}
+		for _, waTool := range whatsapp.MCPToolDefinitions() {
+			tools = append(tools, map[string]any{
+				"name":        waTool.Name,
+				"description": waTool.Description,
+				"inputSchema": waTool.InputSchema,
+			})
+		}
+		for _, wrTool := range radarV1Tools {
+			schema := map[string]any{"type": "object"}
+			if strings.TrimSpace(wrTool.InputSchema) != "" {
+				var parsed map[string]any
+				if err := json.Unmarshal([]byte(wrTool.InputSchema), &parsed); err == nil {
+					schema = parsed
+				}
+			}
+			tools = append(tools, map[string]any{
+				"name":        wrTool.Name,
+				"description": wrTool.Description,
+				"inputSchema": schema,
+			})
+		}
+		return reply(map[string]any{"tools": tools})
 	case "tools/call":
 		var call struct {
 			Name      string         `json:"name"`
@@ -1179,13 +1277,15 @@ func handleMCP(
 		ctx := c.Request().Context()
 		var out any
 		var err error
+		handled := true
 		switch call.Name {
 		case "echo_search_docs":
 			out, err = hub.ListDocs(ctx, strArg("project"), strArg("category"), strArg("query"), intArg("limit", 25))
 		case "echo_get_doc":
 			out, err = hub.GetDoc(ctx, strArg("id"))
 		case "echo_list_tasks":
-			out, err = hub.ListTasks(ctx, strArg("project"), strArg("status"), strArg("priority"), strArg("query"), intArg("limit", 50))
+			out, err = hub.ListTasks(ctx, strArg("project"), strArg("status"), strArg("priority"), strArg("query"),
+				intArg("limit", 50))
 		case "echo_update_task":
 			out, err = hub.UpdateTaskStatus(ctx, strArg("code"), strArg("status"), strArg("priority"), strArg("title"))
 		case "echo_list_storage":
@@ -1199,22 +1299,8 @@ func handleMCP(
 				Description: strArg("description"),
 				Status:      strArg("status"),
 			})
-		case "echo_wa_devices":
-			out, err = waMgr.ListDevices(ctx)
-		case "echo_wa_send_message":
-			deviceID := strArg("deviceId")
-			if deviceID == "" {
-				deviceID = "default"
-			}
-			out, err = waMgr.SendText(ctx, deviceID, strArg("phone"), strArg("message"), "", nil)
-		case "echo_wa_list_chats":
-			out, err = waMgr.ListChats(ctx, strArg("deviceId"), strArg("query"), intArg("limit", 50))
-		case "echo_wa_get_messages":
-			deviceID := strArg("deviceId")
-			if deviceID == "" {
-				deviceID = "default"
-			}
-			out, err = waMgr.ListMessages(ctx, deviceID, strArg("chatJid"), intArg("limit", 50))
+		case "echo_wa_devices", "echo_wa_send_message", "echo_wa_list_chats", "echo_wa_get_messages":
+			out, err = waMgr.HandleMCPToolCall(ctx, call.Name, call.Arguments)
 		case "echo_radar_events":
 			out, err = worldRadar.ListEvents(ctx, strArg("domain"), intArg("limit", 50))
 		case "echo_radar_run":
@@ -1263,6 +1349,24 @@ func handleMCP(
 		case "echo_storage_restore_verify":
 			out, err = pool.VerifyLatestBackupSnapshot(ctx, firstNonEmpty(strArg("objectId"), strArg("objectKey")))
 		default:
+			handled = false
+		}
+		if !handled {
+			for _, wrTool := range radarV1Tools {
+				if wrTool.Name == call.Name {
+					rawArgs := json.RawMessage(`{}`)
+					if call.Arguments != nil {
+						if encodedArgs, marshalErr := json.Marshal(call.Arguments); marshalErr == nil {
+							rawArgs = encodedArgs
+						}
+					}
+					out, err = wrTool.Handler(ctx, rawArgs)
+					handled = true
+					break
+				}
+			}
+		}
+		if !handled {
 			return fail(-32601, "unknown tool: "+call.Name)
 		}
 		if err != nil {

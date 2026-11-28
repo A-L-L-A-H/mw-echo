@@ -79,7 +79,8 @@ func Open(dataDir string) (*HubStore, error) {
 		return nil, fmt.Errorf("create data dirs: %w", err)
 	}
 	dbPath := filepath.Join(cleanDir, "mw-echo.db")
-	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)", filepath.ToSlash(dbPath))
+	dsn := fmt.Sprintf("file:%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)",
+		filepath.ToSlash(dbPath))
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
@@ -269,7 +270,8 @@ VALUES (?, ?, ?, ?, ?, ?)
 	return record, nil
 }
 
-func (s *HubStore) ListDocs(ctx context.Context, project, category, searchQuery string, limit int) ([]DocRecord, error) {
+func (s *HubStore) ListDocs(ctx context.Context, project, category, searchQuery string, limit int) ([]DocRecord,
+	error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
@@ -304,7 +306,8 @@ FROM docs %s ORDER BY updated_at DESC, rel_path ASC LIMIT ?`, whereSQL), args...
 	results := make([]DocRecord, 0)
 	for rows.Next() {
 		var rec DocRecord
-		if err := rows.Scan(&rec.ID, &rec.Project, &rec.RelPath, &rec.Title, &rec.Category, &rec.SHA256, &rec.SizeBytes, &rec.UpdatedAt); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.Project, &rec.RelPath, &rec.Title, &rec.Category, &rec.SHA256, &rec.SizeBytes,
+			&rec.UpdatedAt); err != nil {
 			return nil, err
 		}
 		results = append(results, rec)
@@ -327,7 +330,8 @@ func sanitizeFTSQuery(raw string) string {
 	return strings.Join(quoted, " AND ")
 }
 
-func (s *HubStore) searchDocsFTS(ctx context.Context, project, category, rawQuery string, limit int) ([]DocRecord, error) {
+func (s *HubStore) searchDocsFTS(ctx context.Context, project, category, rawQuery string, limit int) ([]DocRecord,
+	error) {
 	ftsExpr := sanitizeFTSQuery(rawQuery)
 	if ftsExpr == "" {
 		return []DocRecord{}, nil
@@ -363,7 +367,8 @@ LIMIT ?`, strings.Join(clauses, " AND "))
 	results := make([]DocRecord, 0)
 	for rows.Next() {
 		var rec DocRecord
-		if err := rows.Scan(&rec.ID, &rec.Project, &rec.RelPath, &rec.Title, &rec.Category, &rec.Snippet, &rec.SHA256, &rec.SizeBytes, &rec.UpdatedAt); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.Project, &rec.RelPath, &rec.Title, &rec.Category, &rec.Snippet, &rec.SHA256,
+			&rec.SizeBytes, &rec.UpdatedAt); err != nil {
 			return nil, err
 		}
 		results = append(results, rec)
@@ -430,7 +435,8 @@ func (s *HubStore) UpsertTask(ctx context.Context, task TaskRecord) (TaskRecord,
 	task.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 
 	_, err := s.db.ExecContext(ctx, `
-INSERT INTO tasks (code, project, series, milestone, title, summary, priority, status, depends_json, tags_json, payload_json, updated_at)
+INSERT INTO tasks (code, project, series, milestone, title, summary, priority, status, depends_json, tags_json,
+	payload_json, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(code) DO UPDATE SET
   project = excluded.project,
@@ -493,7 +499,8 @@ FROM tasks WHERE code = ?
 	return task, nil
 }
 
-func (s *HubStore) ListTasks(ctx context.Context, project, status, priority, searchQuery string, limit int) ([]TaskRecord, error) {
+func (s *HubStore) ListTasks(ctx context.Context, project, status, priority, searchQuery string,
+	limit int) ([]TaskRecord, error) {
 	if limit <= 0 || limit > 2000 {
 		limit = 200
 	}
@@ -572,7 +579,8 @@ func (s *HubStore) ExportTaskosV2(ctx context.Context) (map[string]any, error) {
 	for rows.Next() {
 		var task TaskRecord
 		var depsRaw, tagsRaw string
-		if err := rows.Scan(&task.Code, &task.Project, &task.Series, &task.Milestone, &task.Title, &task.Summary, &task.Priority, &task.Status, &depsRaw, &tagsRaw, &task.PayloadJSON); err != nil {
+		if err := rows.Scan(&task.Code, &task.Project, &task.Series, &task.Milestone, &task.Title, &task.Summary,
+			&task.Priority, &task.Status, &depsRaw, &tagsRaw, &task.PayloadJSON); err != nil {
 			return nil, err
 		}
 		projectSet[task.Project] = true
